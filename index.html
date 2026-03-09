@@ -1,0 +1,2146 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>WGLT Budget Boss Simulator (Month Mission + Ledger)</title>
+
+  <style>
+    :root{
+      --primary:#1f7ae0; --primary2:#0b57d0;
+      --success:#1fa971; --warning:#f4c542; --danger:#e74c3c;
+      --ink:#223041; --muted:#6b7787;
+      --bg:#f5f7fb; --card:#ffffff; --line:#d9e1ef;
+      --shadow:0 10px 25px rgba(20,40,70,.12);
+      --radius:18px;
+
+      /* ===== Watermark controls =====
+         1) Upload your PNG to Wix Media and paste the URL below.
+         2) Tweak opacity/size if needed. */
+      --wm-url: url("https://static.wixstatic.com/media/80a41b_6d83951403394d179c4ac2403e567c8d~mv2.png");
+      --wm-opacity: .06;     /* 0.04–0.10 */
+      --wm-size: 92%;        /* 70%–110% */
+    }
+
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Comic Sans MS", cursive;
+      background:transparent;
+      color:var(--ink);
+      padding:14px;
+      display:flex;
+      justify-content:center;
+    }
+
+    .app{
+      width:100%;
+      max-width:1180px;
+      background:var(--card);
+      border:3px solid var(--primary);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      overflow:hidden;
+      position:relative;
+    }
+
+    /* ===== Watermark placement (best readability) =====
+       We put the watermark on the non-card "background areas" (header + main),
+       so your content cards stay crisp and readable. */
+    header, main { position:relative; }
+    header::before,
+main::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  background-image: url("https://static.wixstatic.com/media/80a41b_6d83951403394d179c4ac2403e567c8d~mv2.png");
+  background-repeat:no-repeat;
+  background-position:center;
+  background-size: cover;       /* <- fills whole space */
+  opacity: .06;                 /* adjust: .04 to .10 */
+  pointer-events:none;
+  z-index:0;
+  mix-blend-mode:multiply;
+  filter: grayscale(1) contrast(1.05);
+}
+    /* keep content above watermark */
+    header > *, main > * { position:relative; z-index:1; }
+
+    header{
+      padding:14px 14px 10px;
+      background:linear-gradient(180deg,#f0f6ff, #ffffff);
+      border-bottom:1px solid var(--line);
+    }
+    .toprow{
+      display:flex; flex-wrap:wrap; gap:10px;
+      align-items:center; justify-content:space-between;
+    }
+    .brand{
+      display:flex; align-items:center; gap:10px;
+      font-weight:900; letter-spacing:.2px; font-size:18px;
+    }
+    .pill{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:8px 12px; border-radius:999px;
+      border:1px solid var(--line); background:#fff;
+      font-weight:800; font-size:13px;
+    }
+    .money{ color:var(--success); font-weight:1000; }
+    .credit{ color:#7a3df0; font-weight:1000; }
+    .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .toggle{
+      display:flex; gap:8px; align-items:center;
+      padding:6px 10px; border-radius:999px;
+      border:1px solid var(--line); background:#fff;
+      user-select:none; font-size:13px; font-weight:900;
+    }
+    .toggle input{ accent-color: var(--primary); }
+
+    .btn{
+      border:none; border-radius:14px;
+      padding:10px 12px;
+      font-weight:1000; cursor:pointer;
+      box-shadow:0 5px 0 rgba(0,0,0,.1);
+      transition:transform .08s ease;
+      background:var(--primary); color:#fff;
+      font-size:13px; white-space:nowrap;
+    }
+    .btn:active{ transform: translateY(3px); box-shadow:none; }
+    .btn.secondary{ background:#edf3ff; color:var(--ink); border:1px solid var(--line); box-shadow:none; }
+    .btn.warn{ background:var(--warning); color:var(--ink); }
+    .btn.danger{ background:var(--danger); }
+    .btn.success{ background:var(--success); }
+    .btn:disabled{ opacity:.55; cursor:not-allowed; box-shadow:none; transform:none; }
+
+    /* Progress bar */
+    .missionbar{
+      margin-top:10px;
+      padding:10px 12px;
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:14px;
+      display:flex; gap:12px; align-items:center; flex-wrap:wrap;
+    }
+    .missionbar .label{ font-weight:1000; font-size:13px; }
+    .barwrap{
+      flex:1; min-width:260px;
+      height:12px; background:#eef2fb;
+      border-radius:999px; border:1px solid var(--line);
+      overflow:hidden;
+    }
+    .barfill{
+      height:100%; width:0%;
+      background:linear-gradient(90deg, var(--primary), #35c2ff);
+      border-radius:999px;
+      transition:width .25s ease;
+    }
+    .stepmeta{ font-weight:900; font-size:12px; color:var(--muted); }
+
+    main{
+      display:grid;
+      grid-template-columns: 360px 1fr;
+      gap:12px;
+      padding:12px;
+      background:var(--bg);
+    }
+    @media (max-width: 1000px){ main{ grid-template-columns:1fr; } }
+
+    .card{
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:0 6px 18px rgba(25,45,80,.06);
+      overflow:hidden;
+    }
+    .card h3{
+      margin:0; padding:12px 12px 10px;
+      border-bottom:1px solid var(--line);
+      font-size:14px; letter-spacing:.2px;
+    }
+    .card .body{ padding:12px; }
+    .muted{ color:var(--muted); font-size:12px; line-height:1.35; }
+
+    /* Tabs */
+    .tabs{
+      display:flex; gap:8px; flex-wrap:wrap;
+      padding:10px 12px; border-bottom:1px solid var(--line);
+      background:#fff;
+    }
+    .tab{
+      padding:9px 11px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      background:#fff;
+      font-weight:1000; font-size:12px;
+      cursor:pointer; user-select:none;
+    }
+    .tab.active{
+      background:linear-gradient(180deg,#e9f2ff,#ffffff);
+      border-color:#bcd3ff;
+      color:var(--primary2);
+    }
+    .panel{ display:none; }
+    .panel.active{ display:block; }
+
+    /* Fields */
+    .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .field{
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:10px;
+      background:#fff;
+    }
+    .field .name{ font-weight:1000; font-size:12px; color:var(--muted); }
+    .field .value{ font-weight:1100; font-size:18px; margin-top:4px; }
+    .field .def{ margin-top:6px; font-size:11px; color:var(--muted); font-weight:800; }
+    .chips{ display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+    .chip{
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:999px;
+      padding:7px 10px;
+      font-weight:1000;
+      cursor:pointer;
+      font-size:12px;
+      user-select:none;
+    }
+    .chip:active{ transform:translateY(1px); }
+    .minirow{ display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+    .minirow .btn{ padding:8px 10px; border-radius:12px; font-size:12px; }
+
+    /* Glow (used for BOTH buttons + tabs) */
+    .glow{
+      border-radius:16px;
+      animation: glowPulse 1.1s ease-in-out infinite;
+    }
+    .tab.glow{ border-radius:999px; } /* tab-friendly glow */
+    @keyframes glowPulse{
+      0%{ box-shadow:0 0 0 0 rgba(53,194,255,.0), 0 0 0 0 rgba(31,122,224,.0); }
+      35%{ box-shadow:0 0 0 4px rgba(53,194,255,.20), 0 0 0 12px rgba(31,122,224,.12); }
+      100%{ box-shadow:0 0 0 0 rgba(53,194,255,.0), 0 0 0 0 rgba(31,122,224,.0); }
+    }
+
+    /* Banner */
+    .banner{
+      position:fixed; left:50%; top:18px; transform:translateX(-50%);
+      background:#ffffff; border:1px solid var(--line);
+      border-radius:999px; padding:10px 14px;
+      box-shadow:var(--shadow);
+      font-weight:1100; z-index:999;
+      display:none; gap:10px; align-items:center;
+    }
+    .banner.show{ display:flex; }
+    .banner .ok{ color:var(--success); }
+
+    /* Modal */
+    .overlay{
+      position:fixed; inset:0;
+      background:rgba(20,30,50,.45);
+      display:none; z-index:1000;
+      align-items:center; justify-content:center;
+      padding:14px;
+    }
+    .overlay.show{ display:flex; }
+    .modal{
+      width:min(820px, 100%);
+      background:#fff;
+      border-radius:22px;
+      border:1px solid var(--line);
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+    .modal .mhead{
+      padding:14px 14px 10px;
+      border-bottom:1px solid var(--line);
+      background:linear-gradient(180deg,#f0f6ff,#ffffff);
+    }
+    .modal .mtitle{ font-weight:1100; font-size:16px; }
+    .modal .mmeta{ margin-top:4px; font-weight:900; font-size:12px; color:var(--muted); }
+    .modal .mbody{ padding:14px; white-space:pre-line; font-weight:900; color:var(--ink); line-height:1.35; }
+    .modal .mfoot{
+      padding:12px 14px; border-top:1px solid var(--line);
+      display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap;
+    }
+
+    .log{
+      margin-top:10px;
+      padding:10px 12px;
+      border-radius:14px;
+      border:1px solid var(--line);
+      background:#fff;
+      font-weight:900;
+      color:var(--muted);
+      font-size:12px;
+      min-height:56px;
+      white-space:pre-line;
+    }
+    .lockhint{
+      margin-top:8px; padding:10px 12px;
+      border-radius:14px;
+      border:1px dashed #bcd3ff;
+      background:#f3f8ff;
+      font-size:12px;
+      font-weight:900;
+      color:#234;
+      display:none;
+    }
+    .lockhint.show{ display:block; }
+
+    select{
+      border:1px solid var(--line);
+      border-radius:12px;
+      padding:9px 10px;
+      font-weight:900;
+      background:#fff;
+      cursor:pointer;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="banner" id="banner">
+    <span class="ok">✅</span>
+    <span id="bannerText">Done</span>
+  </div>
+
+  <div class="overlay" id="overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="mhead">
+        <div class="mtitle" id="mTitle">Modal Title</div>
+        <div class="mmeta" id="mMeta">Meta</div>
+      </div>
+      <div class="mbody" id="mBody">Body</div>
+      <div class="mfoot" id="mFoot"></div>
+    </div>
+  </div>
+
+  <div class="app">
+    <header>
+      <div class="toprow">
+        <div class="brand">📚 WGLT Budget Boss <span class="muted">(Month Mission • Tap-Only • Ledger)</span></div>
+
+        <div class="row">
+          <span class="pill">Cash: <span class="money" id="cash">$200</span></span>
+          <span class="pill">Day: <span id="day">1</span>/30</span>
+          <span class="pill">Credit: <span class="credit" id="credit">650</span></span>
+          <span class="pill">Savings Goal: <span id="goalBadge">$0</span></span>
+
+          <label class="toggle">
+            <input type="checkbox" id="toggleTeacher" />
+            Teacher Mode
+          </label>
+
+          <label class="toggle" title="When ON, students must complete the glowing step before anything else.">
+            <input type="checkbox" id="toggleLock" />
+            Teacher Lock Mode
+          </label>
+        </div>
+      </div>
+
+      <div class="missionbar">
+        <div class="label">🎯 Month Mission</div>
+        <div class="barwrap"><div class="barfill" id="barFill"></div></div>
+        <div class="stepmeta" id="stepMeta">No mission active</div>
+      </div>
+    </header>
+
+    <main>
+      <!-- LEFT: Mission control -->
+      <section class="card">
+        <h3>Mission Control</h3>
+        <div class="body">
+          <div class="muted">
+            Start mission and complete the full month. Required actions will GLOW.
+          </div>
+
+          <div style="height:10px"></div>
+
+          <div class="field">
+            <div class="name">Student Job</div>
+            <div class="minirow" style="margin-top:10px">
+              <button class="btn secondary" id="jobPrev">◀</button>
+              <div style="flex:1; min-width:180px">
+                <div style="font-weight:1100" id="jobName">Lawn Care</div>
+                <div class="muted" id="jobPay">Weekly Pay: $80</div>
+              </div>
+              <button class="btn secondary" id="jobNext">▶</button>
+            </div>
+            <div class="chips" id="jobTags"></div>
+          </div>
+
+          <div style="height:10px"></div>
+
+          <div class="minirow">
+            <button class="btn success" id="btnStartMission">Start Month Mission</button>
+            <button class="btn secondary" id="btnPauseMission">Pause</button>
+            <button class="btn secondary" id="btnResetMission">Reset</button>
+          </div>
+
+          <div class="lockhint" id="lockHint">
+            🔒 Teacher Lock Mode is ON. Finish the glowing action before switching tabs.
+          </div>
+
+          <div class="log" id="log">Ready. Select a job and start your month mission.</div>
+
+          <div style="height:14px"></div>
+
+          <div class="field">
+            <div class="name">Teacher Scenario Playlist (optional)</div>
+            <div class="muted">Force lesson events (Inheritance → Dispute → Local Tax → Contract)</div>
+            <div class="minirow">
+              <button class="btn" id="playlistStart">Start</button>
+              <button class="btn secondary" id="playlistPause">Pause</button>
+              <button class="btn secondary" id="playlistLoop">Loop: Off</button>
+            </div>
+            <div class="minirow">
+              <button class="btn warn" id="btnPlaylistNext">Run Next Step</button>
+              <button class="btn secondary" id="btnPlaylistProgress">Progress</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- RIGHT: Tabs -->
+      <section class="card">
+        <div class="tabs">
+          <div class="tab active" data-tab="plan">Plan</div>
+          <div class="tab" data-tab="bank">Banking</div>
+          <div class="tab" data-tab="ledger">Business Ledger</div>
+          <div class="tab" data-tab="events">Events</div>
+          <div class="tab" data-tab="contracts">Contracts</div>
+          <div class="tab" data-tab="reports">Reports</div>
+          <div class="tab" data-tab="help">Help</div>
+        </div>
+
+        <div class="body">
+          <!-- PLAN -->
+          <div class="panel active" id="panel-plan">
+            <div class="grid2">
+              <div class="field">
+                <div class="name">Weekly Income</div>
+                <div class="value" id="incomeVal">$80</div>
+                <div class="def">Money earned from your job each week.</div>
+                <div class="chips">
+                  <div class="chip" data-inc="-10">-10</div>
+                  <div class="chip" data-inc="-5">-5</div>
+                  <div class="chip" data-inc="+5">+5</div>
+                  <div class="chip" data-inc="+10">+10</div>
+                  <div class="chip" data-inc="+20">+20</div>
+                </div>
+                <div class="minirow">
+                  <button class="btn secondary" id="btnIncomeToJob">Set to Job Pay</button>
+                </div>
+              </div>
+
+              <div class="field">
+                <div class="name">Payroll Tax Withholding</div>
+                <div class="value" id="taxVal">10%</div>
+                <div class="def">Money taken out before you get paid (funds public services).</div>
+                <div class="chips">
+                  <div class="chip" data-tax="0">0%</div>
+                  <div class="chip" data-tax="10">10%</div>
+                  <div class="chip" data-tax="15">15%</div>
+                  <div class="chip" data-tax="20">20%</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="height:10px"></div>
+
+            <div class="grid2">
+              <div class="field">
+                <div class="name">Needs</div>
+                <div class="value" id="needsVal">$40</div>
+                <div class="def" id="needsDef">Examples: food, basic phone, hygiene, room/rent share, school supplies.</div>
+                <div class="chips">
+                  <div class="chip" data-needs="-5">-5</div>
+                  <div class="chip" data-needs="+5">+5</div>
+                  <div class="chip" data-needs="+10">+10</div>
+                </div>
+              </div>
+
+              <div class="field">
+                <div class="name">Wants</div>
+                <div class="value" id="wantsVal">$16</div>
+                <div class="def">Fun extras that can be reduced if money is tight.</div>
+                <div class="minirow" style="margin-top:10px">
+                  <select id="wantsPick">
+                    <option value="0">Pick a Want (optional)</option>
+                    <option value="3">Candy ($3)</option>
+                    <option value="10">Movie Ticket ($10)</option>
+                    <option value="15">New Game Skin ($15)</option>
+                    <option value="20">Video Game Rental ($20)</option>
+                    <option value="25">Arcade Day ($25)</option>
+                  </select>
+                  <button class="btn secondary" id="btnAddWant">Add</button>
+                  <button class="btn secondary" id="btnClearWants">Clear Wants Add-ons</button>
+                </div>
+                <div class="chips">
+                  <div class="chip" data-wants="-5">-5</div>
+                  <div class="chip" data-wants="+5">+5</div>
+                  <div class="chip" data-wants="+10">+10</div>
+                </div>
+              </div>
+
+              <div class="field">
+                <div class="name">Savings</div>
+                <div class="value" id="saveVal">$16</div>
+                <div class="def" id="saveDef">Money you keep for goals, emergencies, and future plans.</div>
+                <div class="chips">
+                  <div class="chip" data-save="-5">-5</div>
+                  <div class="chip" data-save="+5">+5</div>
+                  <div class="chip" data-save="+10">+10</div>
+                </div>
+              </div>
+
+              <div class="field">
+                <div class="name">Debt Pay</div>
+                <div class="value" id="debtVal">$8</div>
+                <div class="def">Money you pay back if you borrowed. Paying helps credit over time.</div>
+                <div class="chips">
+                  <div class="chip" data-debt="-5">-5</div>
+                  <div class="chip" data-debt="+5">+5</div>
+                  <div class="chip" data-debt="+10">+10</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="height:10px"></div>
+
+            <div class="field">
+              <div class="name">Insurance</div>
+              <div class="value" id="insValLabel">Basic</div>
+              <div class="def" id="insExplain">Insurance can reduce emergency costs (repairs, accidents).</div>
+              <div class="chips">
+                <div class="chip" data-ins="none">None</div>
+                <div class="chip" data-ins="basic">Basic</div>
+                <div class="chip" data-ins="strong">Strong</div>
+              </div>
+            </div>
+
+            <div style="height:10px"></div>
+
+            <div class="minirow">
+              <button class="btn warn" id="btnSuggestedPlan">Suggested Plan</button>
+              <button class="btn success" id="btnApplyPlan">Apply Plan</button>
+              <button class="btn secondary" id="btnNextWeek">Next Week ▶</button>
+              <button class="btn secondary" id="btnSavingsChallenge">Savings Challenge</button>
+            </div>
+          </div>
+
+          <!-- BANK -->
+          <div class="panel" id="panel-bank">
+            <div class="grid2">
+              <div class="field">
+                <div class="name">Balances</div>
+                <div class="value">Checking: <span id="checkingVal">$120</span></div>
+                <div class="value" style="font-size:16px">Savings: <span id="savingsVal">$40</span></div>
+                <div class="def" id="bankTypeLabel">Bank Types: Not chosen</div>
+              </div>
+
+              <div class="field">
+                <div class="name">Write Check Amount (tap-variable)</div>
+                <div class="value" id="checkAmt">$10</div>
+                <div class="def">No typing. Tap +/- chips to set the amount.</div>
+                <div class="chips">
+                  <div class="chip" data-check="-10">-10</div>
+                  <div class="chip" data-check="-5">-5</div>
+                  <div class="chip" data-check="+5">+5</div>
+                  <div class="chip" data-check="+10">+10</div>
+                  <div class="chip" data-check="+25">+25</div>
+                </div>
+                <div class="minirow">
+                  <button class="btn" id="btnWriteCheck">Write Check</button>
+                  <button class="btn secondary" id="btnDepositCheck">Deposit Check</button>
+                </div>
+              </div>
+            </div>
+
+            <div style="height:10px"></div>
+
+            <div class="field">
+              <div class="name">Bank Tools</div>
+              <div class="minirow">
+                <button class="btn secondary" id="btnChooseStartup">Choose Bank + Insurance (Start)</button>
+                <button class="btn secondary" id="btnCompareBanks">Compare Banks</button>
+                <button class="btn secondary" id="btnGoals">Goals</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- LEDGER -->
+          <div class="panel" id="panel-ledger">
+            <div class="field">
+              <div class="name">Mini Business Ledger (tap-only)</div>
+              <div class="def">Track supplies (inventory) and expenses for your job. Purchases affect profit and cash flow.</div>
+
+              <div class="minirow" style="margin-top:10px">
+                <select id="ledgerItemPick"></select>
+                <button class="btn secondary" id="btnLedgerBuy">Buy Item</button>
+                <button class="btn secondary" id="btnLedgerUse">Use Item</button>
+              </div>
+
+              <div class="minirow">
+                <button class="btn secondary" id="btnLedgerExpense">Add Expense</button>
+                <button class="btn secondary" id="btnLedgerClearWeek">Clear Week</button>
+              </div>
+
+              <div class="log" id="ledgerBox">Ledger empty.</div>
+
+              <div class="minirow">
+                <span class="pill">Inventory Value: <span id="invVal">$0</span></span>
+                <span class="pill">Week Expenses: <span id="wkExp">$0</span></span>
+                <span class="pill">Profit This Week: <span id="wkProfit">$0</span></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- EVENTS -->
+          <div class="panel" id="panel-events">
+            <div class="field">
+              <div class="name">Local Tax (Guaranteed)</div>
+              <div class="def">Use this if you need the Local Tax benchmark every time.</div>
+              <div class="minirow">
+                <button class="btn" id="btnGenLocalTax">Generate Local Tax (Lesson)</button>
+                <button class="btn secondary" id="btnPayLocalTax">Pay Local Tax Bill</button>
+                <span class="pill">Due: <span id="localTaxDue">$0</span></span>
+              </div>
+            </div>
+
+            <div style="height:10px"></div>
+
+            <div class="field">
+              <div class="name">Life + Job Events</div>
+              <div class="def">Every job has real-life events. Some require inventory from the Ledger.</div>
+              <div class="minirow">
+                <button class="btn secondary" id="btnInheritance">Trigger Inheritance</button>
+                <button class="btn secondary" id="btnDispute">Start Billing Dispute</button>
+                <button class="btn secondary" id="btnJobEvent">Run Job Real-Life Event</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- CONTRACTS -->
+          <div class="panel" id="panel-contracts">
+            <div class="field">
+              <div class="name">Contracts (choose one during the month)</div>
+              <div class="def">A mission step will require selecting a contract and deciding to accept/decline.</div>
+
+              <div class="minirow" style="margin-top:10px">
+                <select id="contractPick"></select>
+                <button class="btn secondary" id="btnOpenContract">Review Selected Contract</button>
+                <button class="btn danger" id="btnCancelContract">Cancel Contract</button>
+              </div>
+
+              <div class="def" style="margin-top:10px">Active: <b id="contractState">None</b></div>
+            </div>
+          </div>
+
+          <!-- REPORTS -->
+          <div class="panel" id="panel-reports">
+            <div class="field">
+              <div class="name">Standards Coverage</div>
+              <div class="minirow">
+                <button class="btn" id="btnReport">Generate Standards Report</button>
+                <button class="btn secondary" id="btnClearReport">Clear Session</button>
+              </div>
+              <div class="log" id="reportBox">No report yet.</div>
+            </div>
+          </div>
+
+          <!-- HELP -->
+          <div class="panel" id="panel-help">
+            <div class="field">
+              <div class="name">Help</div>
+              <div class="minirow">
+                <button class="btn secondary" id="btnHowToPlay">How to Play</button>
+              </div>
+              <div class="def" style="margin-top:10px">
+                Tip: Required buttons AND tabs glow. With Lock ON, only required actions work.
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+    </main>
+  </div>
+
+<script>
+/* =========================
+   WGLT Budget Boss (Clean Single File)
+   Upgrades included:
+   - Full watermark (header + main background)
+   - Glow highlights BOTH required tab + required button
+   - Optional auto-jump to required tab when student clicks "Got it"
+========================= */
+
+const $ = (id)=>document.getElementById(id);
+const money = (n)=>"$" + Math.max(0, Math.round(n)).toLocaleString();
+const clamp = (n,min,max)=>Math.max(min,Math.min(max,n));
+
+/* Sound FX */
+let audioCtx=null;
+function beep(type="success"){
+  try{
+    if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    const o=audioCtx.createOscillator();
+    const g=audioCtx.createGain();
+    o.connect(g); g.connect(audioCtx.destination);
+    const now=audioCtx.currentTime;
+    const seq={ success:[660,880], warn:[440,330], click:[520], fail:[220,180] }[type]||[600];
+    g.gain.setValueAtTime(0.0001,now);
+    g.gain.exponentialRampToValueAtTime(0.12,now+0.01);
+    let t=now; seq.forEach(hz=>{ o.frequency.setValueAtTime(hz,t); t+=0.09; });
+    g.gain.exponentialRampToValueAtTime(0.0001,now+0.25);
+    o.start(now); o.stop(now+0.26);
+  }catch(e){}
+}
+
+/* Modal */
+function openModal({title,meta="",body="",buttons=[{id:"close",label:"Close",kind:"secondary"}],onPick=null}){
+  $("mTitle").textContent=title;
+  $("mMeta").textContent=meta;
+  $("mBody").textContent=body;
+
+  const foot=$("mFoot"); foot.innerHTML="";
+  buttons.forEach(b=>{
+    const btn=document.createElement("button");
+    btn.className="btn "+(b.kind||"secondary");
+    if(b.kind==="primary") btn.className="btn";
+    if(b.kind==="success") btn.className="btn success";
+    if(b.kind==="warn") btn.className="btn warn";
+    if(b.kind==="danger") btn.className="btn danger";
+    btn.textContent=b.label;
+    btn.onclick=()=>{ beep("click"); closeModal(); onPick && onPick(b.id); };
+    foot.appendChild(btn);
+  });
+
+  $("overlay").classList.add("show");
+  $("overlay").setAttribute("aria-hidden","false");
+}
+function closeModal(){
+  $("overlay").classList.remove("show");
+  $("overlay").setAttribute("aria-hidden","true");
+}
+$("overlay").addEventListener("click",(e)=>{ if(e.target===$("overlay")) closeModal(); });
+
+/* Banner */
+let bannerTimer=null;
+function showBanner(text){
+  $("bannerText").textContent=text;
+  $("banner").classList.add("show");
+  clearTimeout(bannerTimer);
+  bannerTimer=setTimeout(()=> $("banner").classList.remove("show"), 1400);
+}
+
+/* Benchmarks */
+const BENCH = {
+  1:"Bank accounts",
+  2:"Balance a checkbook",
+  3:"Credit & money management",
+  4:"Loan application",
+  5:"Inheritance implications",
+  6:"Insurance basics",
+  7:"Federal/payroll taxes",
+  8:"Local tax assessments",
+  9:"Interest computation",
+  10:"Contracts",
+  11:"Billing disputes",
+  12:"Savings & investing types",
+  13:"Consumer finance laws"
+};
+
+/* Bank products */
+const BANK_PRODUCTS = {
+  checking: [
+    { id:"student", name:"Student Checking", monthlyFee:0, overdraftFee:0, note:"No monthly fee. Starter friendly." },
+    { id:"standard", name:"Standard Checking", monthlyFee:5, overdraftFee:20, note:"Small fee. Overdraft costs more." },
+    { id:"rewards", name:"Rewards Checking", monthlyFee:10, overdraftFee:25, note:"Perks, but higher fees." }
+  ],
+  savings: [
+    { id:"basic", name:"Basic Savings", apr:0.5, minBalance:0, note:"Low interest, no minimum." },
+    { id:"hysa", name:"High-Yield Savings", apr:4.0, minBalance:100, note:"Higher interest. Needs $100 minimum." },
+    { id:"cd", name:"CD (Locked)", apr:5.0, minBalance:200, note:"Higher interest, but withdrawals cost a penalty." }
+  ]
+};
+
+/* Contracts (6) */
+const CONTRACTS = [
+  { id:"phone", name:"Phone Plan", monthly:30, autoRenew:true, cancelFee:25, disclosure:"Auto-renews monthly. Watch fees.", bucket:[10,13] },
+  { id:"stream", name:"Streaming Subscription", monthly:12, autoRenew:true, cancelFee:0, disclosure:"Easy to forget. Small monthly drain.", bucket:[10,3] },
+  { id:"gym", name:"Gym Membership", monthly:25, autoRenew:true, cancelFee:40, disclosure:"Often has cancellation rules.", bucket:[10,13] },
+  { id:"gaming", name:"Game Pass", monthly:15, autoRenew:true, cancelFee:0, disclosure:"Recurring wants. Track it.", bucket:[10,3] },
+  { id:"bike", name:"Bike Repair Plan", monthly:8, autoRenew:false, cancelFee:0, disclosure:"Helps with repairs, not recurring.", bucket:[10,6] },
+  { id:"tutor", name:"Tutoring Platform Fee", monthly:10, autoRenew:true, cancelFee:10, disclosure:"Fee reduces earnings.", bucket:[10,1] }
+];
+
+/* Jobs */
+const JOBS = [
+  { id:"babysitting", name:"Babysitting", pay:60, buckets:[1,2,3,6,7,12,10] },
+  { id:"pet", name:"Pet Sitting", pay:70, buckets:[1,2,3,6,7,12,10] },
+  { id:"dogwalk", name:"Dog Walking", pay:55, buckets:[1,2,3,7,12] },
+  { id:"lawn", name:"Lawn Care", pay:80, buckets:[1,2,3,7,8,12,10] },
+  { id:"cars", name:"Washing Cars", pay:75, buckets:[1,2,3,7,12,9] },
+  { id:"tutor", name:"Tutoring", pay:90, buckets:[1,2,3,7,12,10] },
+  { id:"chores", name:"Housecleaning/Chores", pay:45, buckets:[1,2,3,7,12] },
+  { id:"errands", name:"Running Errands", pay:50, buckets:[1,2,3,7,12,10] },
+  { id:"crafts", name:"Selling Crafts", pay:85, buckets:[1,2,3,7,12,10,11,13] }
+];
+
+/* Ledger item catalog per job (tap-only) */
+const LEDGER_CATALOG = {
+  babysitting: [
+    { id:"snacks", name:"Snacks Pack", cost:8, type:"inventory" },
+    { id:"craft", name:"Craft Kit", cost:10, type:"inventory" }
+  ],
+  pet: [
+    { id:"petfood", name:"Pet Food", cost:10, type:"inventory" },
+    { id:"treats", name:"Treats", cost:6, type:"inventory" }
+  ],
+  dogwalk: [
+    { id:"poncho", name:"Rain Poncho", cost:6, type:"inventory" },
+    { id:"bags", name:"Waste Bags", cost:5, type:"inventory" }
+  ],
+  lawn: [
+    { id:"gas", name:"Gas Can", cost:12, type:"inventory" },
+    { id:"gloves", name:"Gloves", cost:6, type:"inventory" },
+    { id:"bags", name:"Yard Bags", cost:6, type:"inventory" }
+  ],
+  cars: [
+    { id:"soap", name:"Car Soap", cost:9, type:"inventory" },
+    { id:"wax", name:"Wax", cost:11, type:"inventory" },
+    { id:"towels", name:"Microfiber Towels", cost:7, type:"inventory" }
+  ],
+  tutor: [
+    { id:"cards", name:"Flash Cards", cost:7, type:"inventory" },
+    { id:"markers", name:"Markers", cost:5, type:"inventory" }
+  ],
+  chores: [
+    { id:"spray", name:"Cleaning Spray", cost:5, type:"inventory" },
+    { id:"sponges", name:"Sponges", cost:4, type:"inventory" }
+  ],
+  errands: [
+    { id:"fare", name:"Bus Pass (1 ride)", cost:4, type:"inventory" },
+    { id:"bag", name:"Reusable Bag", cost:3, type:"inventory" }
+  ],
+  crafts: [
+    { id:"materials", name:"Craft Materials", cost:12, type:"inventory" },
+    { id:"stickers", name:"Stickers Pack", cost:6, type:"inventory" },
+    { id:"table", name:"Table Rental (Event)", cost:15, type:"expense" }
+  ]
+};
+
+/* State */
+const state = {
+  cash: 200,
+  day: 1,
+  credit: 650,
+
+  teacherMode:false,
+  lockMode:false,
+
+  bank: {
+    checking: 120,
+    savings: 40,
+    checkingType: null,
+    savingsType: null
+  },
+
+  plan: {
+    income: 80,
+    taxPct: 10,
+    needs: 40,
+    wants: 16,
+    wantsExtras: 0,
+    save: 16,
+    debtPay: 8,
+    insurance: "basic"
+  },
+
+  checkAmount: 10,
+  localTaxDue: 0,
+
+  contractActive: false,
+  contractId: null,
+
+  savingsGoal: 0,
+  savingsMilestones: new Set(),
+
+  ledger: {
+    inventory: {},
+    weekExpenses: 0,
+    weekIncome: 0,
+    weekProfit: 0,
+    history: []
+  },
+
+  coverage: new Set(),
+
+  jobs: JOBS,
+  jobIndex: 3,
+
+  mission: { active:false, paused:false, index:0, waitingAction:null, steps:[] },
+
+  playlist: { active:false, paused:false, loop:false, index:0, items:["inheritance","dispute","gen_local_tax","contract_pick"] }
+};
+
+/* Coverage tracking */
+function addCoverage(b){ state.coverage.add(b); }
+function trackCoverageForAction(action){
+  const map = {
+    startup_choose:[1,6,12,3],
+    savings_goal:[12,3],
+    suggested_plan:[3,7],
+    apply_plan:[3,7,1],
+    next_week:[9,12],
+    ledger_buy:[3,1],
+    ledger_use:[3],
+    ledger_expense:[3],
+    job_event:[3,6,12],
+    gen_local_tax:[8],
+    pay_local_tax:[8],
+    inheritance:[5,3],
+    dispute:[11,13],
+    contract_pick:[10,13],
+    review_contract:[10,13],
+    write_check:[2,1],
+    deposit_check:[1,2]
+  };
+  (map[action]||[]).forEach(addCoverage);
+}
+
+/* Required action glow + lock */
+function clearGlow(){ document.querySelectorAll(".glow").forEach(el=>el.classList.remove("glow")); }
+function requiredControlForAction(action){
+  const map = {
+    startup_choose:{tab:"bank", el:"btnChooseStartup"},
+    savings_goal:{tab:"plan", el:"btnSavingsChallenge"},
+    suggested_plan:{tab:"plan", el:"btnSuggestedPlan"},
+    apply_plan:{tab:"plan", el:"btnApplyPlan"},
+    ledger_buy:{tab:"ledger", el:"btnLedgerBuy"},
+    job_event:{tab:"events", el:"btnJobEvent"},
+    gen_local_tax:{tab:"events", el:"btnGenLocalTax"},
+    pay_local_tax:{tab:"events", el:"btnPayLocalTax"},
+    dispute:{tab:"events", el:"btnDispute"},
+    inheritance:{tab:"events", el:"btnInheritance"},
+    contract_pick:{tab:"contracts", el:"btnOpenContract"},
+    review_contract:{tab:"contracts", el:"btnOpenContract"},
+    next_week:{tab:"plan", el:"btnNextWeek"},
+    write_check:{tab:"bank", el:"btnWriteCheck"},
+    deposit_check:{tab:"bank", el:"btnDepositCheck"}
+  };
+  return map[action] || null;
+}
+
+function applyLockRules(){
+  const waiting = state.mission.active ? state.mission.waitingAction : null;
+
+  // Glow ALWAYS when waiting exists (tab + button)
+  clearGlow();
+  const req = waiting ? requiredControlForAction(waiting) : null;
+
+  if(req?.tab){
+    const tabEl = document.querySelector(`.tab[data-tab="${req.tab}"]`);
+    if(tabEl) tabEl.classList.add("glow");
+  }
+  if(req?.el && $(req.el)) $(req.el).classList.add("glow");
+
+  // lock only disables others if lockMode ON
+  $("lockHint").classList.toggle("show", state.lockMode);
+
+  if(!state.lockMode || !waiting){
+    document.querySelectorAll(".tab").forEach(t=>{ t.style.opacity="1"; t.style.cursor="pointer"; });
+    document.querySelectorAll("button").forEach(b=> b.disabled=false);
+    return;
+  }
+
+  const requiredElId = req ? req.el : null;
+  const always = new Set([
+    "toggleTeacher","toggleLock","btnPauseMission","btnResetMission","btnStartMission","jobPrev","jobNext",
+    "playlistStart","playlistPause","playlistLoop","btnPlaylistNext","btnPlaylistProgress"
+  ]);
+
+  document.querySelectorAll("button").forEach(b=>{
+    if(always.has(b.id)) { b.disabled=false; return; }
+    b.disabled = (b.id !== requiredElId);
+  });
+
+  document.querySelectorAll(".tab").forEach(tab=>{
+    const requiredTab = req?.tab;
+    const tabName = tab.dataset.tab;
+    tab.style.opacity = (tabName===requiredTab) ? "1" : ".55";
+    tab.style.cursor = (tabName===requiredTab) ? "pointer" : "not-allowed";
+  });
+
+  // auto-open required tab in lock mode
+  if(req?.tab) openTab(req.tab);
+}
+
+/* Tabs */
+function openTab(name){
+  if(state.lockMode && state.mission.active && state.mission.waitingAction){
+    const req = requiredControlForAction(state.mission.waitingAction);
+    if(req?.tab && req.tab !== name){
+      beep("warn");
+      showBanner("Finish the glowing step");
+      return;
+    }
+  }
+  document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+  document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
+  const t=[...document.querySelectorAll(".tab")].find(x=>x.dataset.tab===name);
+  if(t) t.classList.add("active");
+  const p=$("panel-"+name);
+  if(p) p.classList.add("active");
+
+  // keep glow accurate after switching tabs
+  applyLockRules();
+}
+
+/* UI render */
+function renderHeader(){
+  $("cash").textContent = money(state.cash);
+  $("day").textContent = state.day;
+  $("credit").textContent = state.credit;
+  $("goalBadge").textContent = money(state.savingsGoal);
+  $("checkingVal").textContent = money(state.bank.checking);
+  $("savingsVal").textContent = money(state.bank.savings);
+  $("localTaxDue").textContent = money(state.localTaxDue);
+
+  $("toggleTeacher").checked = state.teacherMode;
+  $("toggleLock").checked = state.lockMode;
+
+  const ct = state.bank.checkingType ? BANK_PRODUCTS.checking.find(x=>x.id===state.bank.checkingType)?.name : "Not chosen";
+  const st = state.bank.savingsType ? BANK_PRODUCTS.savings.find(x=>x.id===state.bank.savingsType)?.name : "Not chosen";
+  $("bankTypeLabel").textContent = `Bank Types: Checking = ${ct} • Savings = ${st}`;
+
+  $("insValLabel").textContent = state.plan.insurance[0].toUpperCase() + state.plan.insurance.slice(1);
+
+  $("incomeVal").textContent = money(state.plan.income);
+  $("taxVal").textContent = `${state.plan.taxPct}%`;
+  $("needsVal").textContent = money(state.plan.needs);
+  $("wantsVal").textContent = money(state.plan.wants + state.plan.wantsExtras);
+  $("saveVal").textContent = money(state.plan.save);
+  $("debtVal").textContent = money(state.plan.debtPay);
+
+  $("checkAmt").textContent = money(state.checkAmount);
+
+  $("contractState").textContent = state.contractActive ? "Active" : "None";
+
+  $("insExplain").textContent =
+    state.plan.insurance==="none" ? "No insurance: emergencies cost more." :
+    state.plan.insurance==="basic" ? "Basic insurance: some emergencies are reduced." :
+    "Strong insurance: emergencies are reduced the most.";
+
+  $("invVal").textContent = money(calcInventoryValue());
+  $("wkExp").textContent = money(state.ledger.weekExpenses);
+  $("wkProfit").textContent = money(state.ledger.weekProfit);
+}
+
+function renderJob(){
+  const job = state.jobs[state.jobIndex];
+  $("jobName").textContent = job.name;
+  $("jobPay").textContent = "Weekly Pay: " + money(job.pay);
+
+  const pick = $("ledgerItemPick");
+  pick.innerHTML = "";
+  const items = LEDGER_CATALOG[job.id] || [];
+  items.forEach(it=>{
+    const opt=document.createElement("option");
+    opt.value=it.id;
+    opt.textContent = `${it.name} (${money(it.cost)})`;
+    pick.appendChild(opt);
+  });
+  if(items.length===0){
+    const opt=document.createElement("option");
+    opt.value="";
+    opt.textContent="No items";
+    pick.appendChild(opt);
+  }
+
+  const tags = $("jobTags");
+  tags.innerHTML = "";
+  job.buckets.forEach(b=>{
+    const chip=document.createElement("div");
+    chip.className="chip";
+    chip.textContent = state.teacherMode ? `Bucket #${b}: ${BENCH[b]}` : `Bucket #${b}`;
+    tags.appendChild(chip);
+  });
+}
+
+function setLog(msg){ $("log").textContent = msg; }
+
+function renderLedger(){
+  const lines = state.ledger.history.slice(-12);
+  $("ledgerBox").textContent = lines.length ? lines.join("\n") : "Ledger empty.";
+}
+
+/* Progress bar */
+function renderProgress(){
+  const m=state.mission;
+  if(!m.active){
+    $("barFill").style.width="0%";
+    $("stepMeta").textContent="No mission active";
+    return;
+  }
+  const total=m.steps.length||1;
+  const pct=Math.round((m.index/total)*100);
+  $("barFill").style.width=pct+"%";
+  const cur=m.steps[m.index];
+  if(cur) $("stepMeta").textContent = `Step ${m.index+1}/${total} • ${cur.title} • Day ${state.day}/30`;
+  else $("stepMeta").textContent = `Mission complete • Day ${state.day}/30`;
+}
+
+/* Money movement helpers */
+function addLedgerLine(s){
+  state.ledger.history.push(s);
+  renderLedger();
+}
+function payFromCheckingThenCashThenSavings(amount){
+  let due = amount;
+
+  const fromChecking = Math.min(due, Math.max(0,state.bank.checking));
+  state.bank.checking -= fromChecking;
+  due -= fromChecking;
+
+  const fromCash = Math.min(due, state.cash);
+  state.cash -= fromCash;
+  due -= fromCash;
+
+  if(due>0){
+    if(state.bank.savingsType==="cd"){
+      const penalty = Math.min(10, Math.max(0,state.bank.savings));
+      state.bank.savings -= penalty;
+      addLedgerLine(`CD penalty: ${money(penalty)}`);
+    }
+    const fromSavings = Math.min(due, Math.max(0,state.bank.savings));
+    state.bank.savings -= fromSavings;
+    due -= fromSavings;
+  }
+
+  if(due>0){
+    state.credit = clamp(state.credit-10,300,850);
+    addLedgerLine("Could not fully pay. Credit -10.");
+  }
+}
+
+/* Ledger functions */
+function getJobCatalogItem(itemId){
+  const job = state.jobs[state.jobIndex];
+  const cat = LEDGER_CATALOG[job.id] || [];
+  return cat.find(x=>x.id===itemId) || null;
+}
+function invQty(id){ return state.ledger.inventory[id] || 0; }
+function setInvQty(id, q){ state.ledger.inventory[id] = Math.max(0,q); }
+function calcInventoryValue(){
+  const job = state.jobs[state.jobIndex];
+  const cat = LEDGER_CATALOG[job.id] || [];
+  let total=0;
+  cat.forEach(it=> total += invQty(it.id) * it.cost );
+  return total;
+}
+function recalcProfit(){
+  state.ledger.weekProfit = state.ledger.weekIncome - state.ledger.weekExpenses;
+}
+function ledgerBuy(){
+  const id = $("ledgerItemPick").value;
+  const it = getJobCatalogItem(id);
+  if(!it){ beep("warn"); return; }
+
+  payFromCheckingThenCashThenSavings(it.cost);
+  setInvQty(it.id, invQty(it.id)+1);
+
+  state.ledger.weekExpenses += it.cost;
+  addLedgerLine(`Bought: ${it.name} (-${money(it.cost)})`);
+  recalcProfit();
+  renderHeader();
+  notifyAction("ledger_buy");
+}
+function ledgerUse(){
+  const id = $("ledgerItemPick").value;
+  const it = getJobCatalogItem(id);
+  if(!it){ beep("warn"); return; }
+  const q = invQty(it.id);
+  if(q<=0){
+    beep("warn");
+    openModal({
+      title:"No Inventory",
+      meta:"Ledger Tip",
+      body:`You don't have ${it.name} in inventory.\nBuy it first in the Ledger tab.`,
+      buttons:[{id:"close",label:"Close",kind:"secondary"}]
+    });
+    return;
+  }
+  setInvQty(it.id, q-1);
+  addLedgerLine(`Used: ${it.name} (qty now ${invQty(it.id)})`);
+  recalcProfit();
+  renderHeader();
+  notifyAction("ledger_use");
+}
+function ledgerAddExpense(){
+  openModal({
+    title:"Add Expense (tap-only)",
+    meta:"Business costs reduce profit",
+    body:"Choose an expense to add to this week:",
+    buttons:[
+      {id:"travel5", label:"Travel/Transport ($5)", kind:"secondary"},
+      {id:"travel10", label:"Travel/Transport ($10)", kind:"secondary"},
+      {id:"repair15", label:"Minor Repair ($15)", kind:"secondary"},
+      {id:"fee8", label:"Platform/Fee ($8)", kind:"secondary"},
+      {id:"close", label:"Cancel", kind:"secondary"}
+    ],
+    onPick:(id)=>{
+      const map={travel5:5, travel10:10, repair15:15, fee8:8};
+      const amt = map[id] || 0;
+      if(amt>0){
+        payFromCheckingThenCashThenSavings(amt);
+        state.ledger.weekExpenses += amt;
+        addLedgerLine(`Expense: -${money(amt)}`);
+        recalcProfit();
+        renderHeader();
+        notifyAction("ledger_expense");
+      }
+    }
+  });
+}
+function ledgerClearWeek(){
+  state.ledger.weekExpenses = 0;
+  state.ledger.weekIncome = 0;
+  recalcProfit();
+  addLedgerLine("Week ledger reset.");
+  renderHeader();
+}
+
+/* Mission system */
+function currentWeekIndex(){
+  if(state.day<=7) return 1;
+  if(state.day<=14) return 2;
+  if(state.day<=21) return 3;
+  if(state.day<=28) return 4;
+  return 5;
+}
+
+function buildMonthMissionSteps(){
+  const steps = [
+    {
+      title:"Startup: Choose bank + insurance",
+      bucket:[1,6,12,3],
+      prompt:
+`Choose your bank accounts and insurance level.
+
+Required:
+• Tap "Choose Bank + Insurance (Start)" (Banking tab)`,
+      requireActions:["startup_choose"]
+    },
+    {
+      title:"Set Savings Challenge Goal",
+      bucket:[12,3],
+      prompt:
+`Pick a savings goal for the month.
+You earn rewards at milestones.
+
+Required:
+• Tap "Savings Challenge" (Plan tab) and set a goal`,
+      requireActions:["savings_goal"]
+    }
+  ];
+
+  for(let w=1; w<=4; w++){
+    steps.push(
+      {
+        title:`Week ${w}: Suggested Plan`,
+        bucket:[3,7],
+        prompt:
+`See the math, then apply your plan.
+
+Required:
+• Suggested Plan
+• Apply Plan`,
+        requireActions:["suggested_plan","apply_plan"]
+      },
+      {
+        title:`Week ${w}: Ledger Buy (inventory)`,
+        bucket:[3,1],
+        prompt:
+`Your job needs supplies. Use the Ledger.
+
+Required:
+• Buy ONE item in the Ledger tab`,
+        requireActions:["ledger_buy"]
+      },
+      {
+        title:`Week ${w}: Job Real-Life Event`,
+        bucket:[3,6,12],
+        prompt:
+`A job situation happens. Some options use inventory.
+
+Required:
+• Run Job Real-Life Event`,
+        requireActions:["job_event"]
+      }
+    );
+
+    if(w===1){
+      steps.push({
+        title:`Week ${w}: Inheritance`,
+        bucket:[5,3],
+        prompt:`Required: Trigger Inheritance and choose an option.`,
+        requireActions:["inheritance"]
+      });
+    }
+    if(w===2){
+      steps.push({
+        title:`Week ${w}: Local Tax (Guaranteed)`,
+        bucket:[8,7],
+        prompt:`Required: Generate Local Tax (Lesson) then Pay Local Tax Bill.`,
+        requireActions:["gen_local_tax","pay_local_tax"]
+      });
+    }
+    if(w===3){
+      steps.push({
+        title:`Week ${w}: Billing Dispute`,
+        bucket:[11,13],
+        prompt:`Required: Start Billing Dispute and choose an action.`,
+        requireActions:["dispute"]
+      });
+    }
+    if(w===4){
+      steps.push({
+        title:`Week ${w}: Choose a Contract`,
+        bucket:[10,13],
+        prompt:
+`Pick one contract from the dropdown and review it.
+You must accept or decline.
+
+Required:
+• Review Selected Contract (Contracts tab)`,
+        requireActions:["contract_pick","review_contract"]
+      });
+    }
+
+    steps.push({
+      title:`Week ${w}: Next Week`,
+      bucket:[9,12],
+      prompt:`Advance time. Bank fees/interest apply. Savings challenge checks milestones.`,
+      requireActions:["next_week"]
+    });
+  }
+
+  steps.push({
+    title:"Month Wrap: Reach Day 30",
+    bucket:[3,9,12],
+    prompt:`Tap Next Week until Day 30. Then generate report.`,
+    requireActions:["next_week"]
+  });
+
+  return steps;
+}
+
+function startMission(){
+  const job = state.jobs[state.jobIndex];
+  state.day = 1;
+  state.plan.income = job.pay;
+  state.plan.wantsExtras = 0;
+
+  state.mission.active=true;
+  state.mission.paused=false;
+  state.mission.index=0;
+  state.mission.steps = buildMonthMissionSteps();
+  state.mission.waitingAction=null;
+
+  state.savingsGoal = 0;
+  state.savingsMilestones = new Set();
+
+  state.ledger.inventory = {};
+  state.ledger.weekExpenses=0;
+  state.ledger.weekIncome=0;
+  state.ledger.weekProfit=0;
+  state.ledger.history=[];
+  renderLedger();
+
+  setLog("Month mission started. Follow the glowing actions.");
+  renderAll();
+  runCurrentMissionStep();
+}
+
+function pauseMission(){
+  if(!state.mission.active) return;
+  state.mission.paused = !state.mission.paused;
+  setLog(state.mission.paused ? "Mission paused." : "Mission resumed.");
+}
+
+function resetMission(){
+  state.mission.active=false;
+  state.mission.paused=false;
+  state.mission.index=0;
+  state.mission.waitingAction=null;
+  state.mission.steps=[];
+  clearGlow();
+  renderAll();
+  setLog("Mission reset.");
+}
+
+/* OPTIONAL AUTO-JUMP:
+   After student clicks "Got it", we auto-open the correct tab.
+   Glow remains on tab + button (because openTab calls applyLockRules). */
+function runCurrentMissionStep(){
+  const m = state.mission;
+  if(!m.active) return;
+  if(m.paused){ setLog("Mission paused."); return; }
+
+  const step = m.steps[m.index];
+  if(!step){
+    m.waitingAction=null;
+    renderProgress();
+    applyLockRules();
+    beep("success");
+    showBanner("Month complete!");
+    openModal({
+      title:"🏁 Month Mission Complete",
+      meta:"Nice work",
+      body:"You finished the month. Generate a Standards Report to see what you covered.",
+      buttons:[{id:"report",label:"Go to Report",kind:"primary"},{id:"close",label:"Close",kind:"secondary"}],
+      onPick:(id)=>{ if(id==="report") openTab("reports"); }
+    });
+    return;
+  }
+
+  if(!step._done) step._done=new Set();
+  const remaining = step.requireActions.filter(a=>!step._done.has(a));
+  const nextAction = remaining[0] || null;
+  m.waitingAction = nextAction;
+
+  renderProgress();
+  applyLockRules();
+
+  const bucketText = state.teacherMode
+    ? step.bucket.map(b=>`Bucket #${b}: ${BENCH[b]}`).join(" • ")
+    : step.bucket.map(b=>`Bucket #${b}`).join(" • ");
+
+  openModal({
+    title:`🎯 ${step.title}`,
+    meta: bucketText,
+    body: step.prompt + (nextAction ? `\n\nNext required action: ${nextAction.replaceAll("_"," ").toUpperCase()}` : ""),
+    buttons:[{id:"ok",label:"Got it",kind:"primary"}],
+    onPick:(id)=>{
+      if(id==="ok" && nextAction){
+        const req = requiredControlForAction(nextAction);
+        if(req?.tab) openTab(req.tab);   // auto-jump
+      }
+    }
+  });
+}
+
+/* Notify action -> mission progress */
+function notifyAction(action){
+  trackCoverageForAction(action);
+
+  const m=state.mission;
+  if(!m.active) return;
+
+  const step=m.steps[m.index];
+  if(!step) return;
+
+  if(!step._done) step._done=new Set();
+  if(step.requireActions.includes(action)){
+    step._done.add(action);
+  }
+
+  const remaining=step.requireActions.filter(a=>!step._done.has(a));
+  if(remaining.length===0){
+    beep("success");
+    showBanner(`Step ${m.index+1} complete`);
+    setLog(`✅ Completed: ${step.title}`);
+    m.index += 1;
+    m.waitingAction=null;
+    renderProgress();
+    applyLockRules();
+    setTimeout(()=>runCurrentMissionStep(), 220);
+  }else{
+    m.waitingAction=remaining[0];
+    applyLockRules();
+  }
+}
+
+/* Startup chooser: bank + insurance (tap only) */
+function startupChoose(){
+  const body =
+`Choose Checking:
+• Student (no monthly fee)
+• Standard ($5 monthly fee)
+• Rewards ($10 monthly fee)
+
+Choose Savings:
+• Basic (0.5% APR)
+• High-Yield (4% APR, needs $100 minimum)
+• CD Locked (5% APR, withdrawals cost penalty)
+
+Choose Insurance:
+• None, Basic, Strong`;
+
+  openModal({
+    title:"🏦 Startup: Bank + Insurance",
+    meta: state.teacherMode ? `Bucket #1: ${BENCH[1]} • Bucket #6: ${BENCH[6]} • Bucket #12: ${BENCH[12]}` : "Bucket #1 • #6 • #12",
+    body,
+    buttons:[
+      {id:"c_student",label:"Checking: Student",kind:"primary"},
+      {id:"c_standard",label:"Checking: Standard",kind:"secondary"},
+      {id:"c_rewards",label:"Checking: Rewards",kind:"secondary"},
+      {id:"s_basic",label:"Savings: Basic",kind:"primary"},
+      {id:"s_hysa",label:"Savings: High-Yield",kind:"secondary"},
+      {id:"s_cd",label:"Savings: CD Locked",kind:"secondary"},
+      {id:"i_none",label:"Insurance: None",kind:"warn"},
+      {id:"i_basic",label:"Insurance: Basic",kind:"primary"},
+      {id:"i_strong",label:"Insurance: Strong",kind:"secondary"},
+      {id:"done",label:"Done",kind:"success"}
+    ],
+    onPick:(id)=>{
+      if(id==="c_student") state.bank.checkingType="student";
+      if(id==="c_standard") state.bank.checkingType="standard";
+      if(id==="c_rewards") state.bank.checkingType="rewards";
+
+      if(id==="s_basic") state.bank.savingsType="basic";
+      if(id==="s_hysa") state.bank.savingsType="hysa";
+      if(id==="s_cd") state.bank.savingsType="cd";
+
+      if(id==="i_none") state.plan.insurance="none";
+      if(id==="i_basic") state.plan.insurance="basic";
+      if(id==="i_strong") state.plan.insurance="strong";
+
+      renderHeader();
+
+      if(id==="done"){
+        if(!state.bank.checkingType || !state.bank.savingsType || !state.plan.insurance){
+          beep("warn");
+          openModal({
+            title:"Not finished",
+            meta:"Pick all three",
+            body:"Select a Checking type, a Savings type, and an Insurance level, then tap Done.",
+            buttons:[{id:"close",label:"Close",kind:"secondary"}]
+          });
+          return;
+        }
+        setLog("Startup complete: bank + insurance selected.");
+        notifyAction("startup_choose");
+      }
+    }
+  });
+}
+
+/* Savings challenge */
+function openSavingsChallenge(){
+  const body =
+`Pick a monthly savings goal.
+Milestones give rewards:
+• 25% goal: +$5 bonus
+• 50% goal: +$10 bonus
+• 75% goal: +$15 bonus
+• 100% goal: +$25 bonus (grand prize)
+
+You can set or change the goal once, early in the month.`;
+
+  openModal({
+    title:"🏁 Savings Challenge",
+    meta: "Tap-only goal selection",
+    body,
+    buttons:[
+      {id:"g50",label:"Goal: $50",kind:"secondary"},
+      {id:"g100",label:"Goal: $100",kind:"primary"},
+      {id:"g200",label:"Goal: $200",kind:"secondary"},
+      {id:"g300",label:"Goal: $300",kind:"secondary"},
+      {id:"close",label:"Close",kind:"secondary"}
+    ],
+    onPick:(id)=>{
+      const map={g50:50,g100:100,g200:200,g300:300};
+      const goal = map[id] || 0;
+      if(goal>0){
+        state.savingsGoal = goal;
+        setLog(`Savings challenge set: ${money(goal)} by Day 30.`);
+        renderHeader();
+        notifyAction("savings_goal");
+      }
+    }
+  });
+}
+
+function checkSavingsMilestones(){
+  if(state.savingsGoal<=0) return;
+
+  const saved = state.bank.savings;
+  const goal = state.savingsGoal;
+  const pct = saved / goal;
+
+  const hits = [
+    {k:"25", thr:0.25, bonus:5},
+    {k:"50", thr:0.50, bonus:10},
+    {k:"75", thr:0.75, bonus:15},
+    {k:"100", thr:1.00, bonus:25}
+  ];
+
+  hits.forEach(h=>{
+    if(pct>=h.thr && !state.savingsMilestones.has(h.k)){
+      state.savingsMilestones.add(h.k);
+      state.bank.checking += h.bonus;
+      showBanner(`Savings milestone ${h.k}%! +${money(h.bonus)} reward`);
+      addLedgerLine(`Savings milestone ${h.k}% reward +${money(h.bonus)} (to checking)`);
+      addCoverage(12);
+    }
+  });
+}
+
+/* Suggested plan */
+function suggestedPlan(){
+  const income=state.plan.income;
+  const needs=Math.round(income*0.50);
+  const baseWants=Math.round(income*0.20);
+  const save=Math.round(income*0.20);
+  const debt=Math.round(income*0.10);
+
+  openModal({
+    title:"📊 Suggested Plan (Math shown)",
+    meta:"50/20/20/10 model",
+    body:
+`Income: ${money(income)}
+
+Needs (50%): ${money(needs)}
+Wants (20%): ${money(baseWants)}  + Want extras (dropdown)
+Savings (20%): ${money(save)}
+Debt (10%): ${money(debt)}
+
+Apply this plan?`,
+    buttons:[
+      {id:"apply",label:"Apply This Plan",kind:"success"},
+      {id:"close",label:"Close",kind:"secondary"}
+    ],
+    onPick:(id)=>{
+      if(id==="apply"){
+        state.plan.needs=needs;
+        state.plan.wants=baseWants;
+        state.plan.save=save;
+        state.plan.debtPay=debt;
+        renderHeader();
+        setLog("Suggested plan applied (base amounts).");
+        notifyAction("suggested_plan");
+      }
+    }
+  });
+}
+
+/* Apply Plan */
+function applyPlan(){
+  const gross=state.plan.income;
+  const tax=Math.round(gross*(state.plan.taxPct/100));
+  const takeHome=gross-tax;
+
+  state.bank.checking += takeHome;
+  state.ledger.weekIncome += takeHome;
+
+  const spend = state.plan.needs + state.plan.wants + state.plan.wantsExtras;
+  state.bank.checking -= spend;
+  state.ledger.weekExpenses += spend;
+
+  state.bank.checking -= state.plan.save;
+  state.bank.savings += state.plan.save;
+
+  state.bank.checking -= state.plan.debtPay;
+  state.credit = clamp(state.credit + Math.round(state.plan.debtPay/5), 300, 850);
+
+  if(state.bank.checking < 0){
+    const ct = state.bank.checkingType ? BANK_PRODUCTS.checking.find(x=>x.id===state.bank.checkingType) : null;
+    const fee = ct ? ct.overdraftFee : 15;
+    state.bank.checking -= fee;
+    state.credit = clamp(state.credit - 12, 300, 850);
+    beep("warn");
+    setLog(`Overdraft! Fee ${money(fee)} applied. Credit -12.`);
+    addLedgerLine(`Overdraft fee: -${money(fee)}`);
+  }else{
+    setLog(`Plan applied. Take-home: ${money(takeHome)} (Tax: ${money(tax)})`);
+  }
+
+  recalcProfit();
+  renderHeader();
+  renderLedger();
+  notifyAction("apply_plan");
+}
+
+/* Weekly bank effects */
+function applyWeeklyBankEffects(){
+  const ct = state.bank.checkingType ? BANK_PRODUCTS.checking.find(x=>x.id===state.bank.checkingType) : null;
+  if(ct && ct.monthlyFee>0){
+    const weeklyFee = Math.round(ct.monthlyFee/4);
+    state.bank.checking -= weeklyFee;
+    addLedgerLine(`Bank fee: -${money(weeklyFee)}`);
+  }
+
+  const st = state.bank.savingsType ? BANK_PRODUCTS.savings.find(x=>x.id===state.bank.savingsType) : null;
+  if(st){
+    const weeklyRate=(st.apr/100)/52;
+    let eligible=true;
+    if(st.id==="hysa" && state.bank.savings < st.minBalance) eligible=false;
+
+    const interest = eligible ? Math.max(0, Math.round(state.bank.savings * weeklyRate)) : 0;
+    state.bank.savings += interest;
+    if(interest>0) addLedgerLine(`Savings interest: +${money(interest)}`);
+    addCoverage(9); addCoverage(12);
+  }
+}
+
+/* Next week */
+function nextWeek(){
+  state.day = clamp(state.day + 7, 1, 30);
+
+  applyWeeklyBankEffects();
+  checkSavingsMilestones();
+
+  state.ledger.weekExpenses = 0;
+  state.ledger.weekIncome = 0;
+  state.ledger.weekProfit = 0;
+  addLedgerLine(`--- New week started (Day ${state.day}) ---`);
+
+  renderAll();
+  notifyAction("next_week");
+}
+
+/* Local tax */
+function generateLocalTax(){
+  const amount = 25 + Math.floor(Math.random()*51);
+  state.localTaxDue += amount;
+  addLedgerLine(`Local tax assessed: +${money(amount)} due`);
+  renderAll();
+  notifyAction("gen_local_tax");
+}
+function payLocalTax(){
+  if(state.localTaxDue<=0){
+    beep("warn");
+    openModal({title:"No Local Tax Due",meta:"Tip",body:"Tap Generate Local Tax first.",buttons:[{id:"close",label:"Close",kind:"secondary"}]});
+    return;
+  }
+  const due = state.localTaxDue;
+  payFromCheckingThenCashThenSavings(due);
+  state.localTaxDue = 0;
+  state.credit = clamp(state.credit + 6, 300, 850);
+  showBanner("Local tax paid");
+  setLog(`Paid local tax: ${money(due)}.`);
+  renderHeader();
+  notifyAction("pay_local_tax");
+}
+
+/* Inheritance + Dispute */
+function triggerInheritance(){
+  openModal({
+    title:"🧾 Inheritance Event",
+    meta: state.teacherMode ? `Bucket #5: ${BENCH[5]} • Bucket #3: ${BENCH[3]}` : "Bucket #5 • Bucket #3",
+    body:"You receive $200. Choose what to do:",
+    buttons:[
+      {id:"save",label:"Save it",kind:"success"},
+      {id:"spend",label:"Spend it",kind:"warn"},
+      {id:"invest",label:"Invest it",kind:"primary"}
+    ],
+    onPick:(id)=>{
+      if(id==="save"){ state.bank.savings += 200; state.credit=clamp(state.credit+3,300,850); addLedgerLine("Inheritance saved: +$200 to savings"); }
+      if(id==="spend"){ state.cash = clamp(state.cash + 200 - 80, 0, 999999); state.credit=clamp(state.credit-2,300,850); addLedgerLine("Inheritance spent (wants): +$200 then -$80"); }
+      if(id==="invest"){
+        const up=Math.random()<0.55;
+        const delta=up?120:-70;
+        state.bank.savings += 200 + delta;
+        state.credit=clamp(state.credit+(up?4:-4),300,850);
+        addLedgerLine(up ? "Inheritance invested: gain +$120" : "Inheritance invested: loss -$70");
+      }
+      renderHeader();
+      notifyAction("inheritance");
+    }
+  });
+}
+function startDispute(){
+  openModal({
+    title:"📞 Billing Dispute",
+    meta: state.teacherMode ? `Bucket #11: ${BENCH[11]} • Bucket #13: ${BENCH[13]}` : "Bucket #11 • Bucket #13",
+    body:"Mystery charge: $35. What do you do?",
+    buttons:[
+      {id:"dispute",label:"Dispute",kind:"success"},
+      {id:"ignore",label:"Ignore",kind:"danger"}
+    ],
+    onPick:(id)=>{
+      if(id==="dispute"){ state.credit=clamp(state.credit+5,300,850); addLedgerLine("Dispute filed. Credit +5"); }
+      else { state.credit=clamp(state.credit-10,300,850); addLedgerLine("Ignored dispute. Credit -10"); }
+      renderHeader();
+      notifyAction("dispute");
+    }
+  });
+}
+
+/* Contracts */
+function populateContracts(){
+  const sel = $("contractPick");
+  sel.innerHTML="";
+  CONTRACTS.forEach(c=>{
+    const opt=document.createElement("option");
+    opt.value=c.id;
+    opt.textContent = `${c.name} ($${c.monthly}/mo)`;
+    sel.appendChild(opt);
+  });
+  sel.value = "phone";
+}
+function reviewSelectedContract(){
+  const id = $("contractPick").value;
+  state.contractId = id;
+  const c = CONTRACTS.find(x=>x.id===id);
+  if(!c) return;
+
+  const meta = state.teacherMode
+    ? c.bucket.map(b=>`Bucket #${b}: ${BENCH[b]}`).join(" • ")
+    : c.bucket.map(b=>`Bucket #${b}`).join(" • ");
+
+  openModal({
+    title:`📄 Contract: ${c.name}`,
+    meta,
+    body:
+`Monthly cost: ${money(c.monthly)}
+Auto-renew: ${c.autoRenew ? "Yes" : "No"}
+Cancellation fee: ${money(c.cancelFee)}
+
+Disclosure:
+${c.disclosure}
+
+Accept this contract?`,
+    buttons:[
+      {id:"accept",label:"Accept",kind:"primary"},
+      {id:"decline",label:"Decline",kind:"secondary"}
+    ],
+    onPick:(pick)=>{
+      if(pick==="accept"){
+        state.contractActive=true;
+        state.bank.checking -= c.monthly;
+        addLedgerLine(`Contract accepted: ${c.name} (-${money(c.monthly)})`);
+        state.credit=clamp(state.credit+1,300,850);
+      }else{
+        state.contractActive=false;
+        addLedgerLine(`Contract declined: ${c.name}`);
+      }
+      renderHeader();
+      notifyAction("review_contract");
+    }
+  });
+}
+function cancelContract(){
+  if(!state.contractActive){
+    beep("warn");
+    setLog("No active contract.");
+    return;
+  }
+  const id = state.contractId || $("contractPick").value;
+  const c = CONTRACTS.find(x=>x.id===id) || CONTRACTS[0];
+
+  openModal({
+    title:"Cancel Contract?",
+    meta:"Avoid auto-renew",
+    body:`Cancel fee: ${money(c.cancelFee)}.`,
+    buttons:[
+      {id:"yes",label:`Cancel (${money(c.cancelFee)})`,kind:"danger"},
+      {id:"no",label:"Keep",kind:"secondary"}
+    ],
+    onPick:(id2)=>{
+      if(id2==="yes"){
+        state.contractActive=false;
+        payFromCheckingThenCashThenSavings(c.cancelFee);
+        addLedgerLine(`Contract cancelled: -${money(c.cancelFee)}`);
+        state.credit=clamp(state.credit+2,300,850);
+        renderHeader();
+      }
+    }
+  });
+}
+
+/* Banking: checks */
+function writeCheck(){
+  const amt = clamp(state.checkAmount,0,500);
+  state.bank.checking -= amt;
+  if(state.bank.checking<0){
+    state.credit=clamp(state.credit-8,300,850);
+    beep("warn");
+    addLedgerLine(`Check ${money(amt)} caused overdraft risk`);
+  }else{
+    addLedgerLine(`Wrote check: -${money(amt)}`);
+  }
+  renderHeader();
+  notifyAction("write_check");
+}
+function depositCheck(){
+  const amt=clamp(state.checkAmount,0,500);
+  state.bank.checking += amt;
+  addLedgerLine(`Deposited: +${money(amt)}`);
+  renderHeader();
+  notifyAction("deposit_check");
+}
+
+/* Wants dropdown add-on */
+function addWantExtra(){
+  const v = parseInt($("wantsPick").value,10) || 0;
+  if(v<=0) return;
+  state.plan.wantsExtras = clamp(state.plan.wantsExtras + v, 0, 200);
+  renderHeader();
+  addLedgerLine(`Want chosen: +${money(v)} (wants add-on)`);
+}
+function clearWantsExtras(){
+  state.plan.wantsExtras = 0;
+  renderHeader();
+  addLedgerLine("Wants add-ons cleared.");
+}
+
+/* Real-life events (kept from your version, unchanged logic) */
+function runJobRealLifeEvent(){
+  const job = state.jobs[state.jobIndex];
+  const week = currentWeekIndex();
+
+  function requireInventory(itemId, fallbackCost, itemName){
+    if(invQty(itemId)>0){
+      setInvQty(itemId, invQty(itemId)-1);
+      addLedgerLine(`Used inventory: ${itemName} (no extra cost)`);
+      return true;
+    }
+    payFromCheckingThenCashThenSavings(fallbackCost);
+    state.ledger.weekExpenses += fallbackCost;
+    addLedgerLine(`No inventory. Paid rush cost: -${money(fallbackCost)} for ${itemName}`);
+    return false;
+  }
+
+  const events = {
+    lawn: [
+      { title:"⛽ Lawn Care: Gas decision", body:`You need gas to mow.\nOption A: Buy gas now ($12)\nOption B: Chance it (risk). If you run out: pay $12 + $8 trip.`,
+        a: ()=>{ requireInventory("gas",12,"Gas Can"); },
+        b: ()=>{ const ranOut = Math.random()<0.55; if(ranOut){ payFromCheckingThenCashThenSavings(20); state.ledger.weekExpenses += 20; addLedgerLine("Ran out of gas: -$20 (gas + trip)"); state.credit=clamp(state.credit-2,300,850);} else { addLedgerLine("Got lucky: no gas run-out"); state.credit=clamp(state.credit+1,300,850);} }
+      },
+      { title:"🛠 Lawn Care: Glove tear", body:`Your gloves tear.\nUse inventory gloves (best) or pay rush price ($9).`,
+        a: ()=>{ requireInventory("gloves",9,"Gloves"); },
+        b: ()=>{ payFromCheckingThenCashThenSavings(9); state.ledger.weekExpenses+=9; addLedgerLine("Rush gloves: -$9"); }
+      },
+      { title:"🧤 Lawn Care: Yard bags", body:`You need yard bags to finish clean-up.\nUse inventory bags or pay rush price ($8).`,
+        a: ()=>{ requireInventory("bags",8,"Yard Bags"); },
+        b: ()=>{ payFromCheckingThenCashThenSavings(8); state.ledger.weekExpenses+=8; addLedgerLine("Rush bags: -$8"); }
+      },
+      { title:"⭐ Lawn Care: Customer tip vs complaint", body:`Choose safe quality or rush.\nSafe: +$10 tip\nRush: 50% chance income -$10 next week`,
+        a: ()=>{ state.bank.checking += 10; state.ledger.weekIncome += 10; addLedgerLine("Tip earned: +$10"); },
+        b: ()=>{ const complaint = Math.random()<0.5; if(complaint){ state.plan.income = clamp(state.plan.income-10,0,500); addLedgerLine("Complaint: income -$10 next week"); } else addLedgerLine("No complaint this time"); }
+      }
+    ]
+  };
+
+  const pack = events[job.id] || events.lawn;
+  const idx = clamp(week-1,0,3);
+  const ev = pack[idx];
+
+  openModal({
+    title: ev.title,
+    meta:"Job real-life decision (tap-only)",
+    body: ev.body + "\n\nChoose one:",
+    buttons:[
+      {id:"a",label:"Option A",kind:"primary"},
+      {id:"b",label:"Option B",kind:"warn"}
+    ],
+    onPick:(id)=>{
+      if(id==="a") ev.a();
+      if(id==="b") ev.b();
+
+      if(state.plan.insurance==="strong") state.credit = clamp(state.credit+1,300,850);
+
+      recalcProfit();
+      renderAll();
+      notifyAction("job_event");
+    }
+  });
+}
+
+/* Compare / Goals / Help */
+function compareBanks(){
+  openModal({
+    title:"🏦 Compare Banks",
+    meta: state.teacherMode ? `Bucket #1: ${BENCH[1]} • Bucket #3: ${BENCH[3]}` : "Bucket #1 • Bucket #3",
+    body:
+`Student Checking: no fee
+Standard Checking: $5/mo fee + overdraft fees
+Rewards Checking: $10/mo fee + bigger overdraft fees
+
+Savings:
+Basic: 0.5% APR
+High-Yield: 4% APR (needs $100 min)
+CD: 5% APR (withdrawal penalty)`,
+    buttons:[{id:"close",label:"Close",kind:"secondary"}]
+  });
+  addCoverage(1); addCoverage(3);
+}
+function goalsModal(){
+  openModal({
+    title:"🎯 Goals",
+    meta:"Month goals",
+    body:
+`Goal 1: Avoid overdraft
+Goal 2: Meet Savings Challenge goal
+Goal 3: Manage wants and stay on plan
+Goal 4: Improve credit`,
+    buttons:[{id:"close",label:"Close",kind:"secondary"}]
+  });
+}
+function howToPlayModal(){
+  openModal({
+    title:"How to Play",
+    meta:"Month Mission flow",
+    body:
+`1) Start Month Mission.
+2) Do the glowing steps in order (Lock Mode can enforce).
+3) Use Ledger to buy supplies and track expenses.
+4) Use Job Events to practice risk vs reward.
+5) A contract choice is required in Week 4.
+6) Use Savings Challenge for milestone rewards.
+7) Generate report at the end.`,
+    buttons:[{id:"close",label:"Close",kind:"secondary"}]
+  });
+}
+
+/* Reports */
+function generateReport(){
+  const list=[...state.coverage].sort((a,b)=>a-b);
+  if(list.length===0){ $("reportBox").textContent="No coverage yet."; return; }
+  const lines=list.map(b=> state.teacherMode ? `Bucket #${b}: ${BENCH[b]}` : `Bucket #${b}`);
+  $("reportBox").textContent =
+`Standards covered (${list.length}/13):
+${lines.join("\n")}
+
+Tip: Full month mission aims to cover all buckets through repeated practice + required contract + taxes + disputes.`;
+}
+function clearReport(){
+  state.coverage=new Set();
+  $("reportBox").textContent="Cleared.";
+  setLog("Session cleared.");
+}
+
+/* Playlist */
+function startPlaylist(){
+  state.playlist.active=true;
+  state.playlist.paused=false;
+  state.playlist.index=0;
+  setLog("Teacher playlist started.");
+}
+function togglePlaylistLoop(){
+  state.playlist.loop=!state.playlist.loop;
+  $("playlistLoop").textContent="Loop: "+(state.playlist.loop?"On":"Off");
+}
+function runNextPlaylistStep(){
+  if(!state.playlist.active){
+    beep("warn");
+    openModal({title:"Playlist not started",meta:"Teacher tool",body:"Tap Start first.",buttons:[{id:"close",label:"Close",kind:"secondary"}]});
+    return;
+  }
+  if(state.playlist.paused){ beep("warn"); setLog("Playlist paused."); return; }
+  const item=state.playlist.items[state.playlist.index];
+  if(!item){
+    if(state.playlist.loop){ state.playlist.index=0; return runNextPlaylistStep(); }
+    state.playlist.active=false; setLog("Playlist complete."); return;
+  }
+  if(item==="inheritance") triggerInheritance();
+  if(item==="dispute") startDispute();
+  if(item==="gen_local_tax") generateLocalTax();
+  if(item==="contract_pick"){ openTab("contracts"); showBanner("Pick a contract"); }
+  state.playlist.index += 1;
+}
+function playlistProgress(){
+  openModal({
+    title:"Playlist Progress",
+    meta:"Teacher tool",
+    body:
+`Active: ${state.playlist.active}
+Paused: ${state.playlist.paused}
+Loop: ${state.playlist.loop}
+Step: ${state.playlist.index}/${state.playlist.items.length}
+Next: ${state.playlist.items[state.playlist.index]||"none"}`,
+    buttons:[{id:"close",label:"Close",kind:"secondary"}]
+  });
+}
+
+/* Wire UI */
+function wire(){
+  $("toggleTeacher").addEventListener("change",(e)=>{
+    state.teacherMode=e.target.checked;
+    renderJob(); renderProgress(); applyLockRules();
+  });
+  $("toggleLock").addEventListener("change",(e)=>{ state.lockMode=e.target.checked; applyLockRules(); });
+
+  document.querySelectorAll(".tab").forEach(t=>t.addEventListener("click",()=>openTab(t.dataset.tab)));
+
+  $("jobPrev").onclick=()=>{ beep("click"); state.jobIndex=(state.jobIndex-1+state.jobs.length)%state.jobs.length; state.plan.income=state.jobs[state.jobIndex].pay; renderJob(); renderHeader(); };
+  $("jobNext").onclick=()=>{ beep("click"); state.jobIndex=(state.jobIndex+1)%state.jobs.length; state.plan.income=state.jobs[state.jobIndex].pay; renderJob(); renderHeader(); };
+
+  $("btnStartMission").onclick=()=>{ beep("click"); startMission(); };
+  $("btnPauseMission").onclick=()=>{ beep("click"); pauseMission(); };
+  $("btnResetMission").onclick=()=>{ beep("click"); resetMission(); };
+
+  $("playlistStart").onclick=()=>{ beep("click"); startPlaylist(); };
+  $("playlistPause").onclick=()=>{ state.playlist.paused=!state.playlist.paused; setLog(state.playlist.paused?"Playlist paused.":"Playlist resumed."); };
+  $("playlistLoop").onclick=()=>{ beep("click"); togglePlaylistLoop(); };
+  $("btnPlaylistNext").onclick=()=>{ beep("click"); runNextPlaylistStep(); };
+  $("btnPlaylistProgress").onclick=()=>{ beep("click"); playlistProgress(); };
+
+  document.querySelectorAll("[data-inc]").forEach(ch=>ch.addEventListener("click",()=>{ state.plan.income=clamp(state.plan.income+parseInt(ch.dataset.inc,10),0,500); renderHeader(); beep("click"); }));
+  $("btnIncomeToJob").onclick=()=>{ beep("click"); state.plan.income=state.jobs[state.jobIndex].pay; renderHeader(); };
+  document.querySelectorAll("[data-tax]").forEach(ch=>ch.addEventListener("click",()=>{ state.plan.taxPct=parseInt(ch.dataset.tax,10); renderHeader(); beep("click"); }));
+  document.querySelectorAll("[data-needs]").forEach(ch=>ch.addEventListener("click",()=>{ state.plan.needs=clamp(state.plan.needs+parseInt(ch.dataset.needs,10),0,500); renderHeader(); beep("click"); }));
+  document.querySelectorAll("[data-wants]").forEach(ch=>ch.addEventListener("click",()=>{ state.plan.wants=clamp(state.plan.wants+parseInt(ch.dataset.wants,10),0,500); renderHeader(); beep("click"); }));
+  document.querySelectorAll("[data-save]").forEach(ch=>ch.addEventListener("click",()=>{ state.plan.save=clamp(state.plan.save+parseInt(ch.dataset.save,10),0,500); renderHeader(); beep("click"); }));
+  document.querySelectorAll("[data-debt]").forEach(ch=>ch.addEventListener("click",()=>{ state.plan.debtPay=clamp(state.plan.debtPay+parseInt(ch.dataset.debt,10),0,500); renderHeader(); beep("click"); }));
+  document.querySelectorAll("[data-ins]").forEach(ch=>ch.addEventListener("click",()=>{ state.plan.insurance=ch.dataset.ins; renderHeader(); beep("click"); }));
+
+  $("btnSuggestedPlan").onclick=()=> suggestedPlan();
+  $("btnApplyPlan").onclick=()=> applyPlan();
+  $("btnNextWeek").onclick=()=> nextWeek();
+  $("btnSavingsChallenge").onclick=()=> openSavingsChallenge();
+
+  $("btnAddWant").onclick=()=> addWantExtra();
+  $("btnClearWants").onclick=()=> clearWantsExtras();
+
+  document.querySelectorAll("[data-check]").forEach(ch=>ch.addEventListener("click",()=>{ state.checkAmount=clamp(state.checkAmount+parseInt(ch.dataset.check,10),0,500); renderHeader(); beep("click"); }));
+  $("btnWriteCheck").onclick=()=> writeCheck();
+  $("btnDepositCheck").onclick=()=> depositCheck();
+
+  $("btnChooseStartup").onclick=()=> startupChoose();
+  $("btnCompareBanks").onclick=()=> compareBanks();
+  $("btnGoals").onclick=()=> goalsModal();
+
+  $("btnLedgerBuy").onclick=()=> ledgerBuy();
+  $("btnLedgerUse").onclick=()=> ledgerUse();
+  $("btnLedgerExpense").onclick=()=> ledgerAddExpense();
+  $("btnLedgerClearWeek").onclick=()=> ledgerClearWeek();
+
+  $("btnGenLocalTax").onclick=()=> generateLocalTax();
+  $("btnPayLocalTax").onclick=()=> payLocalTax();
+  $("btnInheritance").onclick=()=> triggerInheritance();
+  $("btnDispute").onclick=()=> startDispute();
+  $("btnJobEvent").onclick=()=> runJobRealLifeEvent();
+
+  $("btnOpenContract").onclick=()=>{
+    // counts as contract pick + review
+    notifyAction("contract_pick");
+    reviewSelectedContract();
+  };
+  $("btnCancelContract").onclick=()=> cancelContract();
+
+  $("btnReport").onclick=()=> generateReport();
+  $("btnClearReport").onclick=()=> clearReport();
+  $("btnHowToPlay").onclick=()=> howToPlayModal();
+}
+
+/* Render all */
+function renderAll(){
+  renderHeader();
+  renderJob();
+  renderLedger();
+  renderProgress();
+  applyLockRules();
+}
+
+/* INIT */
+populateContracts();
+wire();
+renderAll();
+</script>
+</body>
+</html>
