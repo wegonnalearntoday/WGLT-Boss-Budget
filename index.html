@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>WGLT Budget Boss Simulator (Month Mission + Ledger)</title>
+  <title>WGLT Budget Boss Simulator (Year Mission + Ledger)</title>
 
   <style>
     :root{
@@ -243,11 +243,14 @@ main::before{
     .overlay.show{ display:flex; }
     .modal{
       width:min(820px, 100%);
+      max-height:min(88vh, 820px);
       background:#fff;
       border-radius:22px;
       border:1px solid var(--line);
       box-shadow:var(--shadow);
       overflow:hidden;
+      display:flex;
+      flex-direction:column;
     }
     .modal .mhead{
       padding:14px 14px 10px;
@@ -256,7 +259,7 @@ main::before{
     }
     .modal .mtitle{ font-weight:1100; font-size:16px; }
     .modal .mmeta{ margin-top:4px; font-weight:900; font-size:12px; color:var(--muted); }
-    .modal .mbody{ padding:14px; white-space:pre-line; font-weight:900; color:var(--ink); line-height:1.35; }
+    .modal .mbody{ padding:14px; white-space:pre-line; font-weight:900; color:var(--ink); line-height:1.35; overflow-y:auto; -webkit-overflow-scrolling:touch; flex:1 1 auto; }
     .modal .mfoot{
       padding:12px 14px; border-top:1px solid var(--line);
       display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap;
@@ -286,6 +289,22 @@ main::before{
     }
     .lockhint.show{ display:block; }
 
+
+    @media (max-width: 700px){
+      .overlay{ padding:10px; align-items:center; }
+      .modal{ width:100%; max-height:88vh; border-radius:18px; }
+      .modal .mhead{ padding:12px 12px 8px; }
+      .modal .mbody{ padding:12px; font-size:14px; line-height:1.4; }
+      .modal .mfoot{ padding:10px 12px; }
+    }
+
+    .choice-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; margin-top:10px; }
+    .choice-btn{ border:2px solid var(--line); border-radius:16px; padding:12px; background:#fff; cursor:pointer; text-align:left; font-weight:900; box-shadow:0 4px 12px rgba(20,40,70,.06); }
+    .choice-btn small{ display:block; color:var(--muted); font-weight:800; margin-top:4px; line-height:1.3; }
+    .choice-btn.selected{ border-color:var(--primary); background:#edf3ff; box-shadow:0 0 0 3px rgba(31,122,224,.14); }
+    .done-ready{ animation: glowPulse 1.1s ease-in-out infinite; }
+    .impact-box{ margin-top:10px; padding:10px 12px; border-radius:14px; border:1px solid var(--line); background:#f8fbff; font-weight:900; font-size:12px; color:var(--ink); white-space:pre-line; }
+
     select{
       border:1px solid var(--line);
       border-radius:12px;
@@ -293,6 +312,78 @@ main::before{
       font-weight:900;
       background:#fff;
       cursor:pointer;
+    }
+    .wants-box{
+      min-width:320px;
+      width:min(100%, 430px);
+      max-height:240px;
+      overflow:auto;
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:#fff;
+      padding:8px;
+    }
+    .wants-option{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:8px 10px;
+      border-radius:12px;
+      border:1px solid transparent;
+      font-weight:900;
+      cursor:pointer;
+      margin-bottom:6px;
+    }
+    .wants-option:last-child{ margin-bottom:0; }
+    .wants-option input{ accent-color:var(--primary); transform:scale(1.15); }
+    .wants-option.checked{ background:#edf3ff; border-color:#bcd3ff; }
+    .meter{
+      margin-top:10px;
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:#fff;
+      padding:10px 12px;
+    }
+    .meter-bar{
+      height:12px;
+      background:#eef2fb;
+      border-radius:999px;
+      border:1px solid var(--line);
+      overflow:hidden;
+      margin-top:8px;
+    }
+    .meter-fill{
+      height:100%;
+      width:0%;
+      background:linear-gradient(90deg, var(--success), #8fe3b7);
+      transition:width .25s ease;
+    }
+    .tracker-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+      gap:8px;
+      margin-top:10px;
+    }
+    .tracker-item{
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:10px;
+      background:#fff;
+      font-weight:900;
+      font-size:12px;
+    }
+    .tracker-item.done{
+      background:#edf9f3;
+      border-color:#a7dcc2;
+    }
+    .linkish{
+      border:none;
+      background:transparent;
+      color:var(--primary2);
+      font-weight:1000;
+      cursor:pointer;
+      padding:0;
+      text-decoration:underline;
     }
   </style>
 </head>
@@ -317,30 +408,28 @@ main::before{
   <div class="app">
     <header>
       <div class="toprow">
-        <div class="brand">📚 WGLT Budget Boss <span class="muted">(Month Mission • Tap-Only • Ledger)</span></div>
+        <div class="brand">📚 WGLT Budget Boss <span class="muted">(Year Mission • Tap-Only • Ledger)</span></div>
 
         <div class="row">
           <span class="pill">Cash: <span class="money" id="cash">$200</span></span>
-          <span class="pill">Day: <span id="day">1</span>/30</span>
+          <span class="pill">Month: <span id="day">1</span>/12</span>
           <span class="pill">Credit: <span class="credit" id="credit">650</span></span>
           <span class="pill">Savings Goal: <span id="goalBadge">$0</span></span>
-
-          <label class="toggle">
-            <input type="checkbox" id="toggleTeacher" />
-            Teacher Mode
-          </label>
-
-          <label class="toggle" title="When ON, students must complete the glowing step before anything else.">
-            <input type="checkbox" id="toggleLock" />
-            Teacher Lock Mode
-          </label>
         </div>
       </div>
 
       <div class="missionbar">
-        <div class="label">🎯 Month Mission</div>
+        <div class="label">🎯 Year Mission</div>
         <div class="barwrap"><div class="barfill" id="barFill"></div></div>
         <div class="stepmeta" id="stepMeta">No mission active</div>
+      </div>
+
+      <div class="missionbar" id="impactStrip">
+        <div class="label">📈 Live Impact</div>
+        <span class="pill">Cash Flow: <span id="impactCash">steady</span></span>
+        <span class="pill">Credit Trend: <span id="impactCredit">stable</span></span>
+        <span class="pill">Savings Goal: <span id="impactGoal">not set</span></span>
+        <span class="pill">Monthly Growth: <span id="impactGrowth">pick a savings account</span></span>
       </div>
     </header>
 
@@ -350,7 +439,7 @@ main::before{
         <h3>Mission Control</h3>
         <div class="body">
           <div class="muted">
-            Start mission and complete the full month. Required actions will GLOW.
+            Start the year mission and complete all 12 months. Required actions will glow so players know what to do next.
           </div>
 
           <div style="height:10px"></div>
@@ -371,21 +460,17 @@ main::before{
           <div style="height:10px"></div>
 
           <div class="minirow">
-            <button class="btn success" id="btnStartMission">Start Month Mission</button>
+            <button class="btn success" id="btnStartMission">Start Year Mission</button>
             <button class="btn secondary" id="btnPauseMission">Pause</button>
             <button class="btn secondary" id="btnResetMission">Reset</button>
           </div>
 
-          <div class="lockhint" id="lockHint">
-            🔒 Teacher Lock Mode is ON. Finish the glowing action before switching tabs.
-          </div>
-
-          <div class="log" id="log">Ready. Select a job and start your month mission.</div>
+          <div class="log" id="log">Ready. Choose and lock a year plan first.</div>
 
           <div style="height:14px"></div>
 
           <div class="field">
-            <div class="name">Teacher Scenario Playlist (optional)</div>
+            <div class="name">Scenario Playlist (optional)</div>
             <div class="muted">Force lesson events (Inheritance → Dispute → Local Tax → Contract)</div>
             <div class="minirow">
               <button class="btn" id="playlistStart">Start</button>
@@ -409,7 +494,8 @@ main::before{
           <div class="tab" data-tab="events">Events</div>
           <div class="tab" data-tab="contracts">Contracts</div>
           <div class="tab" data-tab="reports">Reports</div>
-          <div class="tab" data-tab="help">Help</div>
+          <div class="tab" data-tab="sheet">Budget Sheet</div>
+          <div class="tab" data-tab="help">How to Play</div>
         </div>
 
         <div class="body">
@@ -417,19 +503,9 @@ main::before{
           <div class="panel active" id="panel-plan">
             <div class="grid2">
               <div class="field">
-                <div class="name">Weekly Income</div>
-                <div class="value" id="incomeVal">$80</div>
-                <div class="def">Money earned from your job each week.</div>
-                <div class="chips">
-                  <div class="chip" data-inc="-10">-10</div>
-                  <div class="chip" data-inc="-5">-5</div>
-                  <div class="chip" data-inc="+5">+5</div>
-                  <div class="chip" data-inc="+10">+10</div>
-                  <div class="chip" data-inc="+20">+20</div>
-                </div>
-                <div class="minirow">
-                  <button class="btn secondary" id="btnIncomeToJob">Set to Job Pay</button>
-                </div>
+                <div class="name">Monthly Income</div>
+                <div class="value" id="incomeVal">$320</div>
+                <div class="def">This is locked to the student job you selected. Change the job on the left to change income.</div>
               </div>
 
               <div class="field">
@@ -461,47 +537,49 @@ main::before{
 
               <div class="field">
                 <div class="name">Wants</div>
-                <div class="value" id="wantsVal">$16</div>
-                <div class="def">Fun extras that can be reduced if money is tight.</div>
-                <div class="minirow" style="margin-top:10px">
-                  <select id="wantsPick">
-                    <option value="0">Pick a Want (optional)</option>
-                    <option value="3">Candy ($3)</option>
-                    <option value="10">Movie Ticket ($10)</option>
-                    <option value="15">New Game Skin ($15)</option>
-                    <option value="20">Video Game Rental ($20)</option>
-                    <option value="25">Arcade Day ($25)</option>
-                  </select>
-                  <button class="btn secondary" id="btnAddWant">Add</button>
-                  <button class="btn secondary" id="btnClearWants">Clear Wants Add-ons</button>
+                <div class="value" id="wantsVal" style="color:var(--danger)">$0</div>
+                <div class="def" id="wantsDef">Pick one or more wants that add up to at least your plan target before you start the year.</div>
+                <div class="minirow" style="margin-top:10px; align-items:flex-start">
+                  <div id="wantsPick" class="wants-box" aria-label="Choose one or more wants">
+                    <label class="wants-option"><input type="checkbox" value="3" data-label="Candy ($3)"> <span>Candy ($3)</span></label>
+                    <label class="wants-option"><input type="checkbox" value="5" data-label="Snacks ($5)"> <span>Snacks ($5)</span></label>
+                    <label class="wants-option"><input type="checkbox" value="10" data-label="Movie Ticket ($10)"> <span>Movie Ticket ($10)</span></label>
+                    <label class="wants-option"><input type="checkbox" value="12" data-label="Music Streaming ($12)"> <span>Music Streaming ($12)</span></label>
+                    <label class="wants-option"><input type="checkbox" value="15" data-label="New Game Skin ($15)"> <span>New Game Skin ($15)</span></label>
+                    <label class="wants-option"><input type="checkbox" value="18" data-label="Pizza Night ($18)"> <span>Pizza Night ($18)</span></label>
+                    <label class="wants-option"><input type="checkbox" value="20" data-label="Video Game Rental ($20)"> <span>Video Game Rental ($20)</span></label>
+                    <label class="wants-option"><input type="checkbox" value="25" data-label="Arcade Day ($25)"> <span>Arcade Day ($25)</span></label>
+                    <label class="wants-option"><input type="checkbox" value="30" data-label="Shoes/Style Item ($30)"> <span>Shoes/Style Item ($30)</span></label>
+                    <label class="wants-option"><input type="checkbox" value="40" data-label="Game Purchase ($40)"> <span>Game Purchase ($40)</span></label>
+                    <label class="wants-option"><input type="checkbox" value="50" data-label="Weekend Fun Pack ($50)"> <span>Weekend Fun Pack ($50)</span></label>
+                    <label class="wants-option"><input type="checkbox" value="75" data-label="Concert/Big Trip ($75)"> <span>Concert/Big Trip ($75)</span></label>
+                  </div>
+                  <div style="display:flex; flex-direction:column; gap:8px">
+                    <button class="btn secondary" id="btnAddWant">Add Wants to Plan</button>
+                    <button class="btn secondary" id="btnClearWants">Clear Wants</button>
+                    <span class="pill">Target: <span id="wantsTargetLabel">$0</span></span>
+                    <span class="pill">Selected: <span id="wantsPendingLabel">$0</span></span>
+                  </div>
                 </div>
+                <div class="muted" style="margin-top:8px">Tip: check as many wants as needed. Reach the target, then tap Add Wants to Plan.</div>
+              </div>
+
+              <div class="field">
+                <div class="name">Savings + Debt</div>
+                <div class="value" id="saveVal">$64</div>
+                <div class="def" id="saveDef">This bucket covers savings and debt together. In the 70-20-10 rule it uses 20% total, then auto-splits that total into savings first and debt second.</div>
                 <div class="chips">
-                  <div class="chip" data-wants="-5">-5</div>
-                  <div class="chip" data-wants="+5">+5</div>
-                  <div class="chip" data-wants="+10">+10</div>
+                  <div class="chip" data-sd="-10">-10</div>
+                  <div class="chip" data-sd="-5">-5</div>
+                  <div class="chip" data-sd="+5">+5</div>
+                  <div class="chip" data-sd="+10">+10</div>
                 </div>
               </div>
 
               <div class="field">
-                <div class="name">Savings</div>
-                <div class="value" id="saveVal">$16</div>
-                <div class="def" id="saveDef">Money you keep for goals, emergencies, and future plans.</div>
-                <div class="chips">
-                  <div class="chip" data-save="-5">-5</div>
-                  <div class="chip" data-save="+5">+5</div>
-                  <div class="chip" data-save="+10">+10</div>
-                </div>
-              </div>
-
-              <div class="field">
-                <div class="name">Debt Pay</div>
-                <div class="value" id="debtVal">$8</div>
-                <div class="def">Money you pay back if you borrowed. Paying helps credit over time.</div>
-                <div class="chips">
-                  <div class="chip" data-debt="-5">-5</div>
-                  <div class="chip" data-debt="+5">+5</div>
-                  <div class="chip" data-debt="+10">+10</div>
-                </div>
+                <div class="name">Current Split</div>
+                <div class="value" id="debtVal">S $48 • D $16</div>
+                <div class="def">The combined bucket auto-splits 75% to savings and 25% to debt pay so students can still see both pieces in action.</div>
               </div>
             </div>
 
@@ -521,10 +599,13 @@ main::before{
             <div style="height:10px"></div>
 
             <div class="minirow">
-              <button class="btn warn" id="btnSuggestedPlan">Suggested Plan</button>
-              <button class="btn success" id="btnApplyPlan">Apply Plan</button>
-              <button class="btn secondary" id="btnNextWeek">Next Week ▶</button>
+              <button class="btn warn" id="btnSuggestedPlan">Choose Year Plan</button>
+              <span class="pill">Budget Model: <span id="budgetModelLabel">70-20-10 Rule</span></span>
+              <button class="btn success" id="btnApplyPlan">Lock Plan for Year</button>
+              <button class="btn secondary" id="btnNextWeek">Next Month ▶</button>
               <button class="btn secondary" id="btnSavingsChallenge">Savings Challenge</button>
+              <span class="pill">Goal: <span id="goalStatusInline">Not set</span></span>
+              <span class="pill">Plan Lock: <span id="planLockLabel">Unlocked</span></span>
             </div>
           </div>
 
@@ -533,8 +614,9 @@ main::before{
             <div class="grid2">
               <div class="field">
                 <div class="name">Balances</div>
-                <div class="value">Checking: <span id="checkingVal">$120</span></div>
-                <div class="value" style="font-size:16px">Savings: <span id="savingsVal">$40</span></div>
+                <div class="value">Checking: <span id="checkingVal">$0</span> <button class="linkish" id="btnBucket4Checking" type="button">Bucket #4</button></div>
+                <div class="value" style="font-size:16px">Savings: <span id="savingsVal">$0</span> <button class="linkish" id="btnBucket4Savings" type="button">Bucket #4</button></div>
+                <div class="value" style="font-size:16px">Credit Score: <span id="creditInlineVal">650</span> <button class="linkish" id="btnCreditInfo" type="button">Bucket #5</button></div>
                 <div class="def" id="bankTypeLabel">Bank Types: Not chosen</div>
               </div>
 
@@ -560,10 +642,67 @@ main::before{
 
             <div class="field">
               <div class="name">Bank Tools</div>
+              <div class="def">Checking and savings start at $0. Use your $200 cash to fund them. High-Yield needs $30 into savings so $25 can go to high-yield and $5 stays behind to keep savings open.</div>
               <div class="minirow">
                 <button class="btn secondary" id="btnChooseStartup">Choose Bank + Insurance (Start)</button>
                 <button class="btn secondary" id="btnCompareBanks">Compare Banks</button>
                 <button class="btn secondary" id="btnGoals">Goals</button>
+              </div>
+              <div class="impact-box" id="bankChoiceStatus">Checking: Not chosen
+Savings: Not chosen
+Insurance: Not chosen</div>
+              <div class="impact-box" id="choiceImpactBox">Choice Impact
+• Cash: no change yet
+• Credit Score: no change yet
+• Savings Goal: set this next in Plan</div>
+            </div>
+
+            <div style="height:10px"></div>
+
+            <div class="field">
+              <div class="name">Transfer Money</div>
+              <div class="def">Move money either direction so students can cover bills and compare account growth.</div>
+              <div class="minirow" style="margin-top:10px">
+                <select id="transferAmt">
+                  <option value="10">$10</option>
+                  <option value="25" selected>$25</option>
+                  <option value="50">$50</option>
+                  <option value="100">$100</option>
+                </select>
+                <button class="btn secondary" id="btnTransferToSavings">Checking ➜ Savings</button>
+                <button class="btn secondary" id="btnTransferToChecking">Savings ➜ Checking</button>
+              </div>
+            </div>
+
+            <div style="height:10px"></div>
+
+            <div class="field">
+              <div class="name">CD Builder <button class="linkish" id="btnBucket4CD" type="button">Bucket #4</button></div>
+              <div class="def">Open 3-month, 6-month, or 1-year CDs. If there is time left in the year, students can open another one.</div>
+              <div class="minirow" style="margin-top:10px">
+                <select id="cdTermPick">
+                  <option value="3m">3-Month CD • 4.0% APR</option>
+                  <option value="6m">6-Month CD • 4.5% APR</option>
+                  <option value="12m">1-Year CD • 5.0% APR</option>
+                </select>
+                <select id="cdDepositPick">
+                  <option value="25">$25</option>
+                  <option value="50" selected>$50</option>
+                  <option value="100">$100</option>
+                  <option value="200">$200</option>
+                </select>
+                <button class="btn secondary" id="btnOpenCD">Open CD</button>
+              </div>
+              <div class="impact-box" id="cdStatusBox">No active CDs yet.</div>
+              <div class="meter">
+                <div style="font-weight:1100">High-Yield Growth Meter <button class="linkish" id="btnBucket4HYSA" type="button">Bucket #4</button></div>
+                <div class="muted" id="hysaMeterText">Choose and fund a high-yield account to see growth.</div>
+                <div class="meter-bar"><div class="meter-fill" id="hysaMeterFill"></div></div>
+              </div>
+              <div class="meter">
+                <div style="font-weight:1100">CD Maturity Meter <button class="linkish" id="btnBucket4CD2" type="button">Bucket #4</button></div>
+                <div class="muted" id="cdMeterText">Open a CD to start the maturity tracker.</div>
+                <div class="meter-bar"><div class="meter-fill" id="cdMeterFill"></div></div>
               </div>
             </div>
           </div>
@@ -582,15 +721,15 @@ main::before{
 
               <div class="minirow">
                 <button class="btn secondary" id="btnLedgerExpense">Add Expense</button>
-                <button class="btn secondary" id="btnLedgerClearWeek">Clear Week</button>
+                <button class="btn secondary" id="btnLedgerClearWeek">Clear Month</button>
               </div>
 
               <div class="log" id="ledgerBox">Ledger empty.</div>
 
               <div class="minirow">
                 <span class="pill">Inventory Value: <span id="invVal">$0</span></span>
-                <span class="pill">Week Expenses: <span id="wkExp">$0</span></span>
-                <span class="pill">Profit This Week: <span id="wkProfit">$0</span></span>
+                <span class="pill">Month Expenses: <span id="wkExp">$0</span></span>
+                <span class="pill">Profit This Month: <span id="wkProfit">$0</span></span>
               </div>
             </div>
           </div>
@@ -623,7 +762,7 @@ main::before{
           <!-- CONTRACTS -->
           <div class="panel" id="panel-contracts">
             <div class="field">
-              <div class="name">Contracts (choose one during the month)</div>
+              <div class="name">Contracts (choose one during the year)</div>
               <div class="def">A mission step will require selecting a contract and deciding to accept/decline.</div>
 
               <div class="minirow" style="margin-top:10px">
@@ -639,6 +778,12 @@ main::before{
           <!-- REPORTS -->
           <div class="panel" id="panel-reports">
             <div class="field">
+              <div class="name">12 Bucket Tracker</div>
+              <div class="def">Live tracker for the 12 Florida financial literacy buckets covered during play.</div>
+              <div class="tracker-grid" id="bucketTracker"></div>
+            </div>
+            <div style="height:10px"></div>
+            <div class="field">
               <div class="name">Standards Coverage</div>
               <div class="minirow">
                 <button class="btn" id="btnReport">Generate Standards Report</button>
@@ -648,16 +793,28 @@ main::before{
             </div>
           </div>
 
+
+          <!-- SHEET -->
+          <div class="panel" id="panel-sheet">
+            <div class="field">
+              <div class="name">Budget Sheet</div>
+              <div class="def">This tab mirrors your worksheet idea and auto-fills from the selected job, plan, and live balances.</div>
+              <div class="log" id="sheetBox" style="min-height:260px; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">Loading sheet...</div>
+            </div>
+          </div>
+
           <!-- HELP -->
           <div class="panel" id="panel-help">
             <div class="field">
-              <div class="name">Help</div>
+              <div class="name">How to Play</div>
               <div class="minirow">
                 <button class="btn secondary" id="btnHowToPlay">How to Play</button>
+                <button class="btn warn" id="btnCraftsWalkthrough">Selling Crafts Walkthrough</button>
               </div>
               <div class="def" style="margin-top:10px">
-                Tip: Required buttons AND tabs glow. With Lock ON, only required actions work.
+                Tip: Choose and lock a year plan first, then choose a Student Job, build wants, and tap Start Year Mission. Required buttons and tabs glow so players know what to do next.
               </div>
+              <div class="log" style="margin-top:10px">Teacher example: open the Selling Crafts Walkthrough to see a full sample run from setup to report.</div>
             </div>
           </div>
 
@@ -736,33 +893,52 @@ function showBanner(text){
 
 /* Benchmarks */
 const BENCH = {
-  1:"Bank accounts",
-  2:"Balance a checkbook",
-  3:"Credit & money management",
-  4:"Loan application",
-  5:"Inheritance implications",
-  6:"Insurance basics",
-  7:"Federal/payroll taxes",
-  8:"Local tax assessments",
-  9:"Interest computation",
-  10:"Contracts",
-  11:"Billing disputes",
-  12:"Savings & investing types",
-  13:"Consumer finance laws"
+  1:"Earning Income",
+  2:"Spending",
+  3:"Saving",
+  4:"Banking",
+  5:"Credit and Debt",
+  6:"Consumer Protection",
+  7:"Budgeting",
+  8:"Investing",
+  9:"Insurance and Risk Management",
+  10:"Taxes",
+  11:"Financial Decision Making",
+  12:"Career Planning and Financial Goals",
+  13:"Consumer Finance Laws"
+};
+const FL_BUCKETS = {
+  1:"Earning Income",
+  2:"Spending",
+  3:"Saving",
+  4:"Banking",
+  5:"Credit and Debt",
+  6:"Consumer Protection",
+  7:"Budgeting",
+  8:"Investing",
+  9:"Insurance and Risk Management",
+  10:"Taxes",
+  11:"Financial Decision Making",
+  12:"Career Planning and Financial Goals"
 };
 
 /* Bank products */
 const BANK_PRODUCTS = {
   checking: [
-    { id:"student", name:"Student Checking", monthlyFee:0, overdraftFee:0, note:"No monthly fee. Starter friendly." },
-    { id:"standard", name:"Standard Checking", monthlyFee:5, overdraftFee:20, note:"Small fee. Overdraft costs more." },
-    { id:"rewards", name:"Rewards Checking", monthlyFee:10, overdraftFee:25, note:"Perks, but higher fees." }
+    { id:"student", name:"Student Checking", monthlyFee:0, overdraftFee:20, note:"No monthly checking fee. Overdraft fee is $20." },
+    { id:"standard", name:"Standard Checking", monthlyFee:5, overdraftFee:10, note:"$5 monthly fee from savings. Overdraft fee is $10." },
+    { id:"rewards", name:"Rewards Checking", monthlyFee:10, overdraftFee:0, note:"$10 monthly fee from savings. Overdraft fee is waived." }
   ],
   savings: [
-    { id:"basic", name:"Basic Savings", apr:0.5, minBalance:0, note:"Low interest, no minimum." },
-    { id:"hysa", name:"High-Yield Savings", apr:4.0, minBalance:100, note:"Higher interest. Needs $100 minimum." },
-    { id:"cd", name:"CD (Locked)", apr:5.0, minBalance:200, note:"Higher interest, but withdrawals cost a penalty." }
-  ]
+    { id:"basic", name:"Regular Savings", apr:0.5, minBalance:0, note:"Low interest, no minimum." },
+    { id:"hysa", name:"High-Yield Savings", apr:4.0, minBalance:25, note:"Higher interest. Starts at just $25." },
+    { id:"cd", name:"CD Builder", apr:0, minBalance:25, note:"Open 3-month, 6-month, or 1-year CDs." }
+  ],
+  cdTerms: {
+    "3m": { id:"3m", name:"3-Month CD", apr:4.0, months:3 },
+    "6m": { id:"6m", name:"6-Month CD", apr:4.5, months:6 },
+    "12m": { id:"12m", name:"1-Year CD", apr:5.0, months:12 }
+  }
 };
 
 /* Contracts (6) */
@@ -837,25 +1013,36 @@ const state = {
   day: 1,
   credit: 650,
 
-  teacherMode:false,
+  teacherMode:true,
   lockMode:false,
 
   bank: {
-    checking: 120,
-    savings: 40,
+    checking: 0,
+    savings: 0,
     checkingType: null,
-    savingsType: null
+    savingsType: null,
+    cds: [],
+    startupFeePaid: false,
+    hysaPrincipal: 0,
+    hysaAccrued: 0,
+    startCheckingDeposit: 0,
+    startSavingsDeposit: 0
   },
 
   plan: {
-    income: 80,
+    income: 320,
     taxPct: 10,
-    needs: 40,
-    wants: 16,
+    needs: 224,
+    wants: 32,
     wantsExtras: 0,
-    save: 16,
-    debtPay: 8,
-    insurance: "basic"
+    wantsSelections: [],
+    wantsCommitted: false,
+    save: 48,
+    debtPay: 16,
+    insurance: "basic",
+    model: "rule702010",
+    lockedForYear: false,
+    appliedMonths: new Set()
   },
 
   checkAmount: 10,
@@ -866,6 +1053,8 @@ const state = {
 
   savingsGoal: 0,
   savingsMilestones: new Set(),
+  savingsGoalChoice: null,
+
 
   ledger: {
     inventory: {},
@@ -881,6 +1070,7 @@ const state = {
   jobIndex: 3,
 
   mission: { active:false, paused:false, index:0, waitingAction:null, steps:[] },
+  jobLocked: false,
 
   playlist: { active:false, paused:false, loop:false, index:0, items:["inheritance","dispute","gen_local_tax","contract_pick"] }
 };
@@ -905,7 +1095,9 @@ function trackCoverageForAction(action){
     contract_pick:[10,13],
     review_contract:[10,13],
     write_check:[2,1],
-    deposit_check:[1,2]
+    deposit_check:[1,2],
+    transfer_savings:[1,12],
+    open_cd:[9,12]
   };
   (map[action]||[]).forEach(addCoverage);
 }
@@ -928,7 +1120,9 @@ function requiredControlForAction(action){
     review_contract:{tab:"contracts", el:"btnOpenContract"},
     next_week:{tab:"plan", el:"btnNextWeek"},
     write_check:{tab:"bank", el:"btnWriteCheck"},
-    deposit_check:{tab:"bank", el:"btnDepositCheck"}
+    deposit_check:{tab:"bank", el:"btnDepositCheck"},
+    transfer_savings:{tab:"bank", el:"btnTransferToSavings"},
+    open_cd:{tab:"bank", el:"btnOpenCD"}
   };
   return map[action] || null;
 }
@@ -947,7 +1141,7 @@ function applyLockRules(){
   if(req?.el && $(req.el)) $(req.el).classList.add("glow");
 
   // lock only disables others if lockMode ON
-  $("lockHint").classList.toggle("show", state.lockMode);
+  if ($("lockHint")) $("lockHint").classList.toggle("show", state.lockMode);
 
   if(!state.lockMode || !waiting){
     document.querySelectorAll(".tab").forEach(t=>{ t.style.opacity="1"; t.style.cursor="pointer"; });
@@ -957,7 +1151,7 @@ function applyLockRules(){
 
   const requiredElId = req ? req.el : null;
   const always = new Set([
-    "toggleTeacher","toggleLock","btnPauseMission","btnResetMission","btnStartMission","jobPrev","jobNext",
+    "btnPauseMission","btnResetMission","btnStartMission","jobPrev","jobNext",
     "playlistStart","playlistPause","playlistLoop","btnPlaylistNext","btnPlaylistProgress"
   ]);
 
@@ -1003,13 +1197,17 @@ function renderHeader(){
   $("cash").textContent = money(state.cash);
   $("day").textContent = state.day;
   $("credit").textContent = state.credit;
+  if ($("creditInlineVal")) $("creditInlineVal").textContent = state.credit;
   $("goalBadge").textContent = money(state.savingsGoal);
+  if ($("goalStatusInline")) $("goalStatusInline").textContent = state.savingsGoal ? `${money(state.savingsGoal)} by Month 12` : "Not set";
+  if ($("budgetModelLabel")) $("budgetModelLabel").textContent = getBudgetModelName();
+  if ($("planLockLabel")) $("planLockLabel").textContent = state.plan.lockedForYear ? "Locked" : "Unlocked";
   $("checkingVal").textContent = money(state.bank.checking);
   $("savingsVal").textContent = money(state.bank.savings);
   $("localTaxDue").textContent = money(state.localTaxDue);
 
-  $("toggleTeacher").checked = state.teacherMode;
-  $("toggleLock").checked = state.lockMode;
+  if ($("toggleTeacher")) $("toggleTeacher").checked = state.teacherMode;
+  if ($("toggleLock")) $("toggleLock").checked = state.lockMode;
 
   const ct = state.bank.checkingType ? BANK_PRODUCTS.checking.find(x=>x.id===state.bank.checkingType)?.name : "Not chosen";
   const st = state.bank.savingsType ? BANK_PRODUCTS.savings.find(x=>x.id===state.bank.savingsType)?.name : "Not chosen";
@@ -1021,21 +1219,121 @@ function renderHeader(){
   $("taxVal").textContent = `${state.plan.taxPct}%`;
   $("needsVal").textContent = money(state.plan.needs);
   $("wantsVal").textContent = money(state.plan.wants + state.plan.wantsExtras);
-  $("saveVal").textContent = money(state.plan.save);
-  $("debtVal").textContent = money(state.plan.debtPay);
+  updateWantsUI();
+  $("saveVal").textContent = money(state.plan.save + state.plan.debtPay);
+  $("debtVal").textContent = `S ${money(state.plan.save)} • D ${money(state.plan.debtPay)}`;
 
   $("checkAmt").textContent = money(state.checkAmount);
 
   $("contractState").textContent = state.contractActive ? "Active" : "None";
 
   $("insExplain").textContent =
-    state.plan.insurance==="none" ? "No insurance: emergencies cost more." :
-    state.plan.insurance==="basic" ? "Basic insurance: some emergencies are reduced." :
-    "Strong insurance: emergencies are reduced the most.";
+    state.plan.insurance==="none" ? "No insurance: emergencies cost more. Monthly cost: $0." :
+    state.plan.insurance==="basic" ? "Basic insurance: some emergencies are reduced. Monthly cost: $8." :
+    "Strong insurance: emergencies are reduced the most. Monthly cost: $15.";
 
   $("invVal").textContent = money(calcInventoryValue());
   $("wkExp").textContent = money(state.ledger.weekExpenses);
   $("wkProfit").textContent = money(state.ledger.weekProfit);
+
+  if ($("bankChoiceStatus")) {
+    const insuranceLabel = state.plan.insurance ? state.plan.insurance[0].toUpperCase() + state.plan.insurance.slice(1) : "Not chosen";
+    $("bankChoiceStatus").textContent = `Checking: ${ct}
+Savings: ${st}
+Insurance: ${insuranceLabel}`;
+  }
+  if ($("choiceImpactBox")) {
+    $("choiceImpactBox").textContent = getChoiceImpactText();
+  }
+
+  updateImpactStrip();
+  renderCDStatus();
+  renderBucketTracker();
+  renderMeters();
+}
+
+
+function renderBucketTracker(){
+  if(!$("bucketTracker")) return;
+  const html = Object.entries(FL_BUCKETS).map(([k,name])=>{
+    const done = state.coverage.has(Number(k));
+    return `<div class="tracker-item ${done ? 'done' : ''}">${done ? '✅' : '⬜'} Bucket #${k}<br>${name}</div>`;
+  }).join('');
+  $("bucketTracker").innerHTML = html;
+}
+
+function renderMeters(){
+  const hysaTotal = state.bank.hysaPrincipal + state.bank.hysaAccrued;
+  const hysaFill = $("hysaMeterFill");
+  const hysaText = $("hysaMeterText");
+  if(hysaFill && hysaText){
+    if(hysaTotal > 0){
+      const pct = Math.min(100, Math.round((hysaTotal / Math.max(25, state.savingsGoal || hysaTotal)) * 100));
+      hysaFill.style.width = pct + "%";
+      hysaText.textContent = `High-Yield balance ${money(hysaTotal)} on ${money(state.bank.hysaPrincipal)} principal. Growth earned: ${money(state.bank.hysaAccrued)}.`;
+    }else{
+      hysaFill.style.width = "0%";
+      hysaText.textContent = "Choose and fund a high-yield account to see growth.";
+    }
+  }
+  const cdFill = $("cdMeterFill");
+  const cdText = $("cdMeterText");
+  if(cdFill && cdText){
+    if(state.bank.cds.length){
+      const nextCd = state.bank.cds.slice().sort((a,b)=>a.monthsLeft-b.monthsLeft)[0];
+      const pct = Math.min(100, Math.round(((nextCd.termMonths - nextCd.monthsLeft) / nextCd.termMonths) * 100));
+      cdFill.style.width = pct + "%";
+      cdText.textContent = `${nextCd.name}: ${nextCd.monthsLeft} month(s) left. Principal ${money(nextCd.principal)}, growth ${money(nextCd.accrued)}.`;
+    }else{
+      cdFill.style.width = "0%";
+      cdText.textContent = "Open a CD to start the maturity tracker.";
+    }
+  }
+}
+
+function guidePreStart(){
+  clearGlow();
+  if(!state.plan.lockedForYear){
+    openTab("plan");
+    const planTab = document.querySelector('.tab[data-tab="plan"]');
+    if(planTab) planTab.classList.add("glow");
+    if($("btnSuggestedPlan")) $("btnSuggestedPlan").classList.add("glow");
+    if($("btnApplyPlan")) $("btnApplyPlan").classList.add("glow");
+    setLog("Step 1: choose and lock your year plan.");
+  } else if(!state.jobLocked && !state.mission.active){
+    openTab("plan");
+    const planTab = document.querySelector('.tab[data-tab="plan"]');
+    if(planTab) planTab.classList.add("glow");
+    const jobField = $("jobName") ? $("jobName").closest(".field") : null;
+    if(jobField) jobField.classList.add("glow");
+    setLog("Step 2: choose a student job. Then build wants and start the year mission.");
+  } else {
+    openTab("plan");
+  }
+  updateWantsUI();
+}
+
+function guideWantsStep(){
+  openTab('plan');
+  clearGlow();
+  const planTab = document.querySelector('.tab[data-tab="plan"]');
+  if(planTab) planTab.classList.add('glow');
+  const wantsField = $("wantsPick") ? $("wantsPick").closest('.field') : null;
+  if(wantsField) wantsField.classList.add('glow');
+  updateWantsUI();
+}
+
+function showBucketInfo(bucketNum){
+  openModal({
+    title:`Bucket #${bucketNum}`,
+    meta: FL_BUCKETS[bucketNum] || BENCH[bucketNum] || "Financial literacy standard",
+    body: bucketNum === 4
+      ? "Bucket #4 is Banking. This covers checking accounts, savings accounts, CDs, debit tools, fees, and digital banking choices."
+      : bucketNum === 5
+        ? "Bucket #5 is Credit and Debt. Credit scores help lenders, landlords, and sometimes insurers judge how reliably you handle borrowed money. Higher scores can help you qualify more easily and pay less in interest. Missing payments, overdrafts, and poor debt choices can drag the score down."
+        : `This bucket covers ${FL_BUCKETS[bucketNum] || BENCH[bucketNum]}.`,
+    buttons:[{id:"close",label:"Close",kind:"secondary"}]
+  });
 }
 
 function renderJob(){
@@ -1088,7 +1386,7 @@ function renderProgress(){
   const pct=Math.round((m.index/total)*100);
   $("barFill").style.width=pct+"%";
   const cur=m.steps[m.index];
-  if(cur) $("stepMeta").textContent = `Step ${m.index+1}/${total} • ${cur.title} • Day ${state.day}/30`;
+  if(cur) $("stepMeta").textContent = `Step ${m.index+1}/${total} • ${cur.title} • Month ${state.day}/12`;
   else $("stepMeta").textContent = `Mission complete • Day ${state.day}/30`;
 }
 
@@ -1097,6 +1395,114 @@ function addLedgerLine(s){
   state.ledger.history.push(s);
   renderLedger();
 }
+function totalCdFunds(){
+  return state.bank.cds.reduce((sum,cd)=>sum + cd.principal + cd.accrued, 0);
+}
+
+function getFundingChoices(includeCd=true){
+  const choices = [
+    { id:"cash", label:`Cash (${money(state.cash)})`, amount:state.cash },
+    { id:"checking", label:`Checking (${money(state.bank.checking)})`, amount:state.bank.checking },
+    { id:"savings", label:`Savings (${money(state.bank.savings)})`, amount:state.bank.savings }
+  ];
+  if(includeCd){
+    choices.push({ id:"cd", label:`CD (${money(totalCdFunds())})`, amount:totalCdFunds() });
+  }
+  return choices;
+}
+
+function withdrawFromCd(amount){
+  let need = Math.max(0, Math.round(amount||0));
+  if(need<=0) return {paid:0, penalty:0, maturedOnly:false};
+  let paid = 0;
+  let penalty = 0;
+  let maturedOnly = true;
+  const cds = state.bank.cds.slice().sort((a,b)=>a.monthsLeft-b.monthsLeft);
+  for(const cd of cds){
+    if(need<=0) break;
+    const available = cd.principal + cd.accrued;
+    if(available<=0) continue;
+    const take = Math.min(available, need);
+    const ratio = take / available;
+    const principalTake = Math.min(cd.principal, Math.round(cd.principal * ratio));
+    let accruedTake = take - principalTake;
+    if(accruedTake > cd.accrued){
+      accruedTake = cd.accrued;
+    }
+    cd.principal = Math.max(0, cd.principal - principalTake);
+    cd.accrued = Math.max(0, cd.accrued - accruedTake);
+    if(cd.monthsLeft > 0){
+      maturedOnly = false;
+      const thisPenalty = Math.min(15, Math.max(3, Math.round(take * 0.1)));
+      penalty += thisPenalty;
+      state.credit = clamp(state.credit - 8, 300, 850);
+      addLedgerLine(`${cd.name} cashed out early: ${money(take)} with ${money(thisPenalty)} penalty and credit -8`);
+    } else {
+      addLedgerLine(`${cd.name} used after maturity: ${money(take)}`);
+    }
+    paid += take;
+    need -= take;
+  }
+  state.bank.cds = state.bank.cds.filter(cd => (cd.principal + cd.accrued) > 0);
+  return {paid, penalty, maturedOnly};
+}
+
+function spendFromSource(source, amount){
+  amount = Math.max(0, Math.round(amount||0));
+  if(source === 'cash'){
+    if(state.cash < amount) return {ok:false, message:'Not enough cash'};
+    state.cash -= amount;
+    return {ok:true, summary:`Paid ${money(amount)} from cash`};
+  }
+  if(source === 'checking'){
+    if(state.bank.checking < amount) return {ok:false, message:'Not enough in checking'};
+    state.bank.checking -= amount;
+    return {ok:true, summary:`Paid ${money(amount)} from checking`};
+  }
+  if(source === 'savings'){
+    if(state.bank.savings < amount) return {ok:false, message:'Not enough in savings'};
+    state.bank.savings -= amount;
+    return {ok:true, summary:`Paid ${money(amount)} from savings`};
+  }
+  if(source === 'cd'){
+    const total = totalCdFunds();
+    if(total < amount) return {ok:false, message:'Not enough in CDs'};
+    const result = withdrawFromCd(amount);
+    if(result.penalty > 0){
+      if(state.cash >= result.penalty) state.cash -= result.penalty;
+      else if(state.bank.checking >= result.penalty) state.bank.checking -= result.penalty;
+      else state.bank.savings = Math.max(0, state.bank.savings - result.penalty);
+    }
+    return {ok:true, summary:`Paid ${money(result.paid)} from CD${result.penalty ? ` with ${money(result.penalty)} early withdrawal penalty` : ''}`};
+  }
+  return {ok:false, message:'Unknown funding source'};
+}
+
+function chooseFundingSource(amount, reason, onPaid){
+  const choices = getFundingChoices(true);
+  const body = `${reason}
+
+Choose where to take ${money(amount)} from:`;
+  openModal({
+    title:'Choose Payment Source',
+    meta:'See each balance before spending',
+    body,
+    buttons:[...choices.map(c=>({id:c.id,label:c.label,kind:'secondary'})), {id:'cancel', label:'Cancel', kind:'secondary'}],
+    onPick:(id)=>{
+      if(id==='cancel') return;
+      const result = spendFromSource(id, amount);
+      if(!result.ok){
+        beep('warn');
+        showBanner(result.message);
+        return;
+      }
+      addLedgerLine(result.summary);
+      renderAll();
+      if(onPaid) onPaid(id, result);
+    }
+  });
+}
+
 function payFromCheckingThenCashThenSavings(amount){
   let due = amount;
 
@@ -1147,15 +1553,14 @@ function ledgerBuy(){
   const id = $("ledgerItemPick").value;
   const it = getJobCatalogItem(id);
   if(!it){ beep("warn"); return; }
-
-  payFromCheckingThenCashThenSavings(it.cost);
-  setInvQty(it.id, invQty(it.id)+1);
-
-  state.ledger.weekExpenses += it.cost;
-  addLedgerLine(`Bought: ${it.name} (-${money(it.cost)})`);
-  recalcProfit();
-  renderHeader();
-  notifyAction("ledger_buy");
+  chooseFundingSource(it.cost, `Buy ${it.name} for ${money(it.cost)}.`, ()=>{
+    setInvQty(it.id, invQty(it.id)+1);
+    state.ledger.weekExpenses += it.cost;
+    addLedgerLine(`Bought: ${it.name} (-${money(it.cost)})`);
+    recalcProfit();
+    renderHeader();
+    notifyAction("ledger_buy");
+  });
 }
 function ledgerUse(){
   const id = $("ledgerItemPick").value;
@@ -1181,8 +1586,8 @@ function ledgerUse(){
 function ledgerAddExpense(){
   openModal({
     title:"Add Expense (tap-only)",
-    meta:"Business costs reduce profit",
-    body:"Choose an expense to add to this week:",
+    meta:"Business costs reduce profit for the current month",
+    body:"Choose an expense to add to this month:",
     buttons:[
       {id:"travel5", label:"Travel/Transport ($5)", kind:"secondary"},
       {id:"travel10", label:"Travel/Transport ($10)", kind:"secondary"},
@@ -1194,12 +1599,12 @@ function ledgerAddExpense(){
       const map={travel5:5, travel10:10, repair15:15, fee8:8};
       const amt = map[id] || 0;
       if(amt>0){
-        payFromCheckingThenCashThenSavings(amt);
-        state.ledger.weekExpenses += amt;
-        addLedgerLine(`Expense: -${money(amt)}`);
-        recalcProfit();
-        renderHeader();
-        notifyAction("ledger_expense");
+        chooseFundingSource(amt, `Choose where to pay this ${money(amt)} business expense from.`, ()=>{
+          state.ledger.weekExpenses += amt;
+          addLedgerLine(`Expense: -${money(amt)}`);
+          recalcProfit();
+          renderHeader();
+        });
       }
     }
   });
@@ -1214,134 +1619,155 @@ function ledgerClearWeek(){
 
 /* Mission system */
 function currentWeekIndex(){
-  if(state.day<=7) return 1;
-  if(state.day<=14) return 2;
-  if(state.day<=21) return 3;
-  if(state.day<=28) return 4;
-  return 5;
+  return state.day;
 }
 
 function buildMonthMissionSteps(){
+  const job = state.jobs[state.jobIndex];
   const steps = [
     {
-      title:"Startup: Choose bank + insurance",
+      title:"Month 1: Choose bank + insurance",
       bucket:[1,6,12,3],
-      prompt:
-`Choose your bank accounts and insurance level.
+      prompt:`Choose your checking account, savings account, and insurance.
 
 Required:
 • Tap "Choose Bank + Insurance (Start)" (Banking tab)`,
       requireActions:["startup_choose"]
     },
     {
-      title:"Set Savings Challenge Goal",
+      title:"Month 1: Set Savings Challenge Goal",
       bucket:[12,3],
-      prompt:
-`Pick a savings goal for the month.
-You earn rewards at milestones.
+      prompt:`Pick a year-end savings goal.
 
 Required:
 • Tap "Savings Challenge" (Plan tab) and set a goal`,
       requireActions:["savings_goal"]
-    }
+    },
   ];
 
-  for(let w=1; w<=4; w++){
-    steps.push(
-      {
-        title:`Week ${w}: Suggested Plan`,
-        bucket:[3,7],
-        prompt:
-`See the math, then apply your plan.
-
-Required:
-• Suggested Plan
-• Apply Plan`,
-        requireActions:["suggested_plan","apply_plan"]
-      },
-      {
-        title:`Week ${w}: Ledger Buy (inventory)`,
+  for(let m=1; m<=12; m++){
+    if(m % 2 === 1){
+      steps.push({
+        title:`Month ${m}: Stock up supplies`,
         bucket:[3,1],
-        prompt:
-`Your job needs supplies. Use the Ledger.
+        prompt:`Use the Ledger to buy one job item for this month.
 
 Required:
 • Buy ONE item in the Ledger tab`,
         requireActions:["ledger_buy"]
-      },
-      {
-        title:`Week ${w}: Job Real-Life Event`,
+      });
+    } else {
+      steps.push({
+        title:`Month ${m}: Run a real-life event`,
         bucket:[3,6,12],
-        prompt:
-`A job situation happens. Some options use inventory.
+        prompt:`Handle the real-life job event for this month.
 
 Required:
 • Run Job Real-Life Event`,
         requireActions:["job_event"]
-      }
-    );
+      });
+    }
 
-    if(w===1){
-      steps.push({
-        title:`Week ${w}: Inheritance`,
-        bucket:[5,3],
-        prompt:`Required: Trigger Inheritance and choose an option.`,
-        requireActions:["inheritance"]
-      });
-    }
-    if(w===2){
-      steps.push({
-        title:`Week ${w}: Local Tax (Guaranteed)`,
-        bucket:[8,7],
-        prompt:`Required: Generate Local Tax (Lesson) then Pay Local Tax Bill.`,
-        requireActions:["gen_local_tax","pay_local_tax"]
-      });
-    }
-    if(w===3){
-      steps.push({
-        title:`Week ${w}: Billing Dispute`,
-        bucket:[11,13],
-        prompt:`Required: Start Billing Dispute and choose an action.`,
-        requireActions:["dispute"]
-      });
-    }
-    if(w===4){
-      steps.push({
-        title:`Week ${w}: Choose a Contract`,
-        bucket:[10,13],
-        prompt:
-`Pick one contract from the dropdown and review it.
-You must accept or decline.
+    if(m===2){
+      steps.push({ title:"Month 2: Move money to savings", bucket:[1,12], prompt:`Show the student how moving money changes growth.
 
 Required:
-• Review Selected Contract (Contracts tab)`,
-        requireActions:["contract_pick","review_contract"]
-      });
+• Transfer money from checking to savings`, requireActions:["transfer_savings"] });
+    }
+    if(m===3){
+      steps.push({ title:"Month 3: Inheritance lesson", bucket:[5,3], prompt:`Required:
+• Trigger Inheritance and choose an option.`, requireActions:["inheritance"] });
+    }
+    if(m===4){
+      steps.push({ title:"Month 4: Local tax lesson", bucket:[8,7], prompt:`Required:
+• Generate Local Tax (Lesson)
+• Pay Local Tax Bill`, requireActions:["gen_local_tax","pay_local_tax"] });
+    }
+    if(m===5){
+      steps.push({ title:"Month 5: Open a CD", bucket:[9,12], prompt:`Open a CD and explain the term length.
+
+Required:
+• Open CD`, requireActions:["open_cd"] });
+    }
+    if(m===6){
+      steps.push({ title:"Month 6: Billing dispute", bucket:[11,13], prompt:`Required:
+• Start Billing Dispute and choose an action.`, requireActions:["dispute"] });
+    }
+    if(m===8){
+      steps.push({ title:"Month 8: Contract review", bucket:[10,13], prompt:`Pick one contract from the dropdown and review it.
+
+Required:
+• Review Selected Contract`, requireActions:["contract_pick","review_contract"] });
+    }
+    if(m===9){
+      steps.push({ title:"Month 9: Transfer more savings", bucket:[1,12], prompt:`Move more money from checking to savings.
+
+Required:
+• Transfer money from checking to savings`, requireActions:["transfer_savings"] });
+    }
+    if(m===10){
+      steps.push({ title:"Month 10: Write a check", bucket:[2,1], prompt:`Show money movement with a check.
+
+Required:
+• Write Check`, requireActions:["write_check"] });
+    }
+    if(m===11){
+      steps.push({ title:"Month 11: Deposit a check", bucket:[1,2], prompt:`Bring money back into the account.
+
+Required:
+• Deposit Check`, requireActions:["deposit_check"] });
     }
 
     steps.push({
-      title:`Week ${w}: Next Week`,
+      title:`Month ${m}: Move ahead`,
       bucket:[9,12],
-      prompt:`Advance time. Bank fees/interest apply. Savings challenge checks milestones.`,
+      prompt:`Advance to the next month. Interest, fees, growth, and credit effects will apply.`,
       requireActions:["next_week"]
     });
   }
-
-  steps.push({
-    title:"Month Wrap: Reach Day 30",
-    bucket:[3,9,12],
-    prompt:`Tap Next Week until Day 30. Then generate report.`,
-    requireActions:["next_week"]
-  });
-
   return steps;
 }
 
 function startMission(){
+  if(!state.plan.lockedForYear){
+    beep("warn");
+    openTab("plan");
+    showBanner("Choose and lock the year plan first");
+    guidePreStart();
+    return;
+  }
+  if(!state.plan.wantsCommitted || state.plan.wants < getWantsTargetAmount()){
+    beep("warn");
+    openTab("plan");
+    showBanner(`Build wants to at least ${money(getWantsTargetAmount())} first`);
+    updateWantsUI();
+    return;
+  }
   const job = state.jobs[state.jobIndex];
   state.day = 1;
-  state.plan.income = job.pay;
+  state.plan.income = job.pay * 4;
   state.plan.wantsExtras = 0;
+  state.plan.appliedMonths = new Set();
+  const currentModel = state.plan.model || "rule702010";
+  const committedWants = state.plan.wants;
+  const committedSelections = [...state.plan.wantsSelections];
+  const currentInsurance = state.plan.insurance;
+  applyBudgetModel(currentModel);
+  state.plan.wants = committedWants;
+  state.plan.wantsSelections = committedSelections;
+  state.plan.wantsCommitted = true;
+  state.plan.insurance = currentInsurance;
+  state.bank.cds = [];
+  state.bank.startupFeePaid = false;
+  state.bank.hysaPrincipal = 0;
+  state.bank.hysaAccrued = 0;
+  state.bank.startCheckingDeposit = 0;
+  state.bank.startSavingsDeposit = 0;
+  state.bank.checking = 0;
+  state.bank.savings = 0;
+  state.bank.checkingType = null;
+  state.bank.savingsType = null;
+  state.jobLocked = true;
 
   state.mission.active=true;
   state.mission.paused=false;
@@ -1359,7 +1785,7 @@ function startMission(){
   state.ledger.history=[];
   renderLedger();
 
-  setLog("Month mission started. Follow the glowing actions.");
+  setLog("Year mission started. Follow the glowing actions through all 12 months.");
   renderAll();
   runCurrentMissionStep();
 }
@@ -1371,14 +1797,76 @@ function pauseMission(){
 }
 
 function resetMission(){
-  state.mission.active=false;
-  state.mission.paused=false;
-  state.mission.index=0;
-  state.mission.waitingAction=null;
-  state.mission.steps=[];
+  const currentJob = state.jobs[state.jobIndex];
+  state.cash = 200;
+  state.day = 1;
+  state.credit = 650;
+  state.localTaxDue = 0;
+  state.contractActive = false;
+  state.contractId = null;
+  state.coverage = new Set();
+
+  state.bank.checking = 0;
+  state.bank.savings = 0;
+  state.bank.checkingType = null;
+  state.bank.savingsType = null;
+  state.bank.cds = [];
+  state.bank.startupFeePaid = false;
+  state.bank.hysaPrincipal = 0;
+  state.bank.hysaAccrued = 0;
+  state.bank.startCheckingDeposit = 0;
+  state.bank.startSavingsDeposit = 0;
+
+  state.plan.income = currentJob.pay * 4;
+  state.plan.taxPct = 10;
+  state.plan.wantsExtras = 0;
+  state.plan.wantsSelections = [];
+  state.plan.wantsCommitted = false;
+  state.plan.insurance = "basic";
+  state.plan.model = "rule702010";
+  state.plan.lockedForYear = false;
+  state.plan.appliedMonths = new Set();
+  applyBudgetModel("rule702010");
+
+  state.savingsGoal = 0;
+  state.savingsMilestones = new Set();
+  state.savingsGoalChoice = null;
+
+  state.ledger.inventory = {};
+  state.ledger.weekExpenses = 0;
+  state.ledger.weekIncome = 0;
+  state.ledger.weekProfit = 0;
+  state.ledger.history = [];
+
+  state.mission.active = false;
+  state.mission.paused = false;
+  state.mission.index = 0;
+  state.mission.waitingAction = null;
+  state.mission.steps = [];
+  state.jobLocked = false;
+
   clearGlow();
   renderAll();
-  setLog("Mission reset.");
+  guidePreStart();
+  setLog("Game reset. Choose a student job and start a new year mission.");
+}
+
+function confirmResetMission(){
+  openModal({
+    title:"Reset the Whole Game?",
+    meta:"This clears the year mission and all choices",
+    body:"You are about to reset the whole game. This will clear the mission, bank choices, plan, savings goal, CDs, ledger, report progress, and put everything back to a brand-new game.",
+    buttons:[
+      {id:"no",label:"No",kind:"secondary"},
+      {id:"yes",label:"Yes, Reset",kind:"danger"}
+    ],
+    onPick:(id)=>{
+      if(id === "yes"){
+        beep("success");
+        resetMission();
+      }
+    }
+  });
 }
 
 /* OPTIONAL AUTO-JUMP:
@@ -1395,11 +1883,11 @@ function runCurrentMissionStep(){
     renderProgress();
     applyLockRules();
     beep("success");
-    showBanner("Month complete!");
+    showBanner("Year complete!");
     openModal({
-      title:"🏁 Month Mission Complete",
+      title:"🏁 Year Mission Complete",
       meta:"Nice work",
-      body:"You finished the month. Generate a Standards Report to see what you covered.",
+      body:"You finished the year. Generate a Standards Report to see what you covered.",
       buttons:[{id:"report",label:"Go to Report",kind:"primary"},{id:"close",label:"Close",kind:"secondary"}],
       onPick:(id)=>{ if(id==="report") openTab("reports"); }
     });
@@ -1463,105 +1951,458 @@ function notifyAction(action){
   }
 }
 
+function getBudgetModelName(){
+  return state.plan.model === "rule503020" ? "50-30-20 Rule" : "70-20-10 Rule";
+}
+
+function getWantsTargetRatio(){
+  return state.plan.model === "rule503020" ? 0.30 : 0.10;
+}
+
+function getWantsTargetAmount(){
+  return Math.round(state.plan.income * getWantsTargetRatio());
+}
+
+function getSelectedWantInputs(){
+  const box = $("wantsPick");
+  if(!box) return [];
+  return [...box.querySelectorAll('input[type="checkbox"]:checked')];
+}
+
+function syncWantsChecklistStyles(){
+  const box = $("wantsPick");
+  if(!box) return;
+  box.querySelectorAll('.wants-option').forEach(label=>{
+    const cb = label.querySelector('input[type="checkbox"]');
+    label.classList.toggle('checked', !!cb?.checked);
+  });
+}
+
+function getPendingWantsSelectionTotal(){
+  const sel = $("wantsPick");
+  if(!sel) return state.plan.wants;
+  return getSelectedWantInputs().reduce((sum,o)=>sum + Number(o.value||0), 0);
+}
+
+function updateWantsUI(){
+  syncWantsChecklistStyles();
+  const wantsEl = $("wantsVal");
+  const addBtn = $("btnAddWant");
+  const startBtn = $("btnStartMission");
+  const target = getWantsTargetAmount();
+  const pending = getPendingWantsSelectionTotal();
+  if($("wantsTargetLabel")) $("wantsTargetLabel").textContent = money(target);
+  if($("wantsPendingLabel")) $("wantsPendingLabel").textContent = money(pending);
+  if($("wantsDef")) $("wantsDef").textContent = `Pick one or more wants that add up to at least ${money(target)} for the ${getBudgetModelName()} before you start the year.`;
+  if(wantsEl){
+    wantsEl.style.color = state.plan.wantsCommitted && state.plan.wants >= target ? 'var(--success)' : 'var(--danger)';
+  }
+  if(addBtn){
+    addBtn.classList.toggle('glow', pending >= target && !state.plan.wantsCommitted && !state.mission.active && state.plan.lockedForYear);
+  }
+  if(startBtn){
+    startBtn.classList.toggle('glow', !state.mission.active && state.plan.lockedForYear && state.plan.wantsCommitted && state.plan.wants >= target);
+  }
+}
+
+function getSavingsMonthlyGrowth(){
+  const s = state.bank.savingsType ? BANK_PRODUCTS.savings.find(x=>x.id===state.bank.savingsType) : null;
+  if(!s) return {rate:0, amount:0, note:"pick a savings account"};
+  if(s.id==="cd"){
+    if(!state.bank.cds.length) return {rate:0, amount:0, note:"open a CD term to start locked growth"};
+    const monthly = state.bank.cds.reduce((sum, cd)=> sum + Math.round(cd.principal * (cd.apr/100)), 0);
+    return {rate:0, amount:monthly, note:`${state.bank.cds.length} active CD(s), projected growth next month about ${money(monthly)}`};
+  }
+  const eligible = !(s.id === "hysa" && state.bank.hysaPrincipal < 25);
+  const base = s.id === 'hysa' ? state.bank.hysaPrincipal : state.bank.savings;
+  const amount = eligible ? Math.round(base * (s.apr/100)) : 0;
+  const note = eligible ? `${money(base)} growing at ${s.apr}% next month = about ${money(base + amount)}` : `needs ${money(s.minBalance)} minimum before growth starts`;
+  return {rate:s.apr, amount, note};
+}
+
+function getCreditTrendText(){
+  const c = state.bank.checkingType ? BANK_PRODUCTS.checking.find(x=>x.id===state.bank.checkingType) : null;
+  const s = state.bank.savingsType ? BANK_PRODUCTS.savings.find(x=>x.id===state.bank.savingsType) : null;
+  if(!c && !s) return 'stable';
+  let parts=[];
+  if(c){
+    if(c.id==='student') parts.push('no monthly fee but overdraft is $20');
+    if(c.id==='standard') parts.push('$5 savings fee and $10 overdraft');
+    if(c.id==='rewards') parts.push('$10 savings fee and overdraft waived');
+  }
+  if(s){
+    if(s.id==='basic') parts.push('regular savings is steady');
+    if(s.id==='hysa') parts.push('high-yield can add +1 monthly confidence');
+    if(s.id==='cd') parts.push('CDs can add +1 or +2 at maturity');
+  }
+  return parts.join(' • ');
+}
+
+function updateImpactStrip(){
+  if (!$("impactCash")) return;
+  const c = state.bank.checkingType ? BANK_PRODUCTS.checking.find(x=>x.id===state.bank.checkingType) : null;
+  const growth = getSavingsMonthlyGrowth();
+  const hysaTotal = state.bank.hysaPrincipal + state.bank.hysaAccrued;
+  $("impactCash").textContent = c ? (c.monthlyFee ? `${money(c.monthlyFee)}/mo fees` : 'no monthly fees') : 'use cash to fund accounts';
+  $("impactCredit").innerHTML = `<button class="linkish" id="btnImpactCreditInfo" type="button">${getCreditTrendText()}</button>`;
+  $("impactGoal").textContent = state.savingsGoal ? `${money(state.bank.savings + hysaTotal)} saved toward ${money(state.savingsGoal)}` : 'not set';
+  $("impactGrowth").textContent = growth.note;
+  if($("btnImpactCreditInfo")) $("btnImpactCreditInfo").onclick = ()=> showBucketInfo(5);
+}
+
+function getChoiceImpactText(){
+  const c = state.bank.checkingType ? BANK_PRODUCTS.checking.find(x=>x.id===state.bank.checkingType) : null;
+  const s = state.bank.savingsType ? BANK_PRODUCTS.savings.find(x=>x.id===state.bank.savingsType) : null;
+  const ins = state.plan.insurance || null;
+  const growth = getSavingsMonthlyGrowth();
+  const cashLine = c ? (c.monthlyFee>0 ? `• Cash: ${c.name} charges ${money(c.monthlyFee)} each month from savings. Overdraft fee is ${c.overdraftFee ? money(c.overdraftFee) : 'waived'} if checking goes below $0.` : `• Cash: Student Checking has no monthly fee, but overdraft still costs ${money(c.overdraftFee || 20)}.`) : '• Cash: choose a checking account and fund it with cash';
+  const creditLine = s?.id==='cd' ? `• Credit Score: CDs reward patience, but early withdrawal hurts credit.` : s?.id==='hysa' ? `• Credit Score: High-yield stays strongest when you keep the account active and funded.` : c ? `• Credit Score: ${c.id==='student' ? 'no monthly fee, but an overdraft costs $20' : c.id==='standard' ? 'smaller overdraft fee with a monthly savings charge' : 'monthly savings charge, but overdraft is waived'}` : '• Credit Score: account choices affect overdraft and payment risk';
+  const savingsLine = s ? `• Savings Goal: ${s.id==='cd' ? 'open a CD below and watch its maturity meter move each month' : s.id==='hysa' ? 'fund savings with at least $30 so $25 can move to high-yield and $5 stays behind' : `${s.name} grows about ${money(growth.amount)} each month`}` : '• Savings Goal: choose a savings account to see growth';
+  const insuranceLine = ins ? `• Insurance: ${ins==='none' ? 'monthly cost $0, but emergencies hit harder' : ins==='basic' ? 'monthly cost $8 with balanced protection' : 'monthly cost $15 with the strongest protection'}` : '• Insurance: choose protection level to see risk impact';
+  return `Choice Impact
+${cashLine}
+${creditLine}
+${savingsLine}
+${insuranceLine}`;
+}
+
+function splitSavingsDebt(total){
+  total = Math.max(0, Math.round(Number(total)||0));
+  const save = Math.round(total * 0.75);
+  const debt = Math.max(0, total - save);
+  return { save, debt };
+}
+
+function setSavingsDebtTotal(total){
+  const split = splitSavingsDebt(total);
+  state.plan.save = split.save;
+  state.plan.debtPay = split.debt;
+}
+
+function applyBudgetModel(model){
+  const income = state.plan.income;
+  state.plan.model = model;
+  state.plan.wants = 0;
+  state.plan.wantsExtras = 0;
+  state.plan.wantsSelections = [];
+  state.plan.wantsCommitted = false;
+  if($("wantsPick")) $("wantsPick").querySelectorAll('input[type="checkbox"]').forEach(o=> o.checked = false);
+  syncWantsChecklistStyles();
+  if(model === "rule503020"){
+    state.plan.needs = Math.round(income * 0.50);
+    setSavingsDebtTotal(Math.round(income * 0.20));
+  } else {
+    state.plan.needs = Math.round(income * 0.70);
+    setSavingsDebtTotal(Math.round(income * 0.20));
+  }
+  updateWantsUI();
+}
+
+function canLockCurrentPlan(){
+  return state.plan.needs > 0 && state.plan.wantsCommitted && state.plan.wants >= getWantsTargetAmount() && (state.plan.save + state.plan.debtPay) > 0;
+}
+
+function startupSelectionComplete(){
+  if(!(state.bank.checkingType && state.bank.savingsType && state.plan.insurance)) return false;
+  const check = Number(state.bank.startCheckingDeposit || 0);
+  const save = Number(state.bank.startSavingsDeposit || 0);
+  if((check + save) > state.cash) return false;
+  if(state.bank.savingsType === 'hysa' && save < 30) return false;
+  return true;
+}
+
+
+function renderCDStatus(){
+  if(!$("cdStatusBox")) return;
+  const lines = [];
+  if(state.bank.hysaPrincipal > 0){
+    lines.push(`High-Yield Savings: principal ${money(state.bank.hysaPrincipal)} • growth ${money(state.bank.hysaAccrued)} • Bucket #4`);
+  }
+  if(state.bank.cds.length){
+    state.bank.cds.forEach(cd=> lines.push(`${cd.name}: ${money(cd.principal)} • ${cd.apr}% APR • ${cd.monthsLeft} month(s) left • accrued ${money(cd.accrued)} • Bucket #4`));
+  }
+  $("cdStatusBox").textContent = lines.length ? lines.join("\n") : "No active high-yield investment or CDs yet.";
+}
+
+function createCD(termKey, deposit, silent=false, source='player'){
+  const term = BANK_PRODUCTS.cdTerms[termKey];
+  if(!term) return false;
+  deposit = Number(deposit||0);
+  if(deposit < 25){ if(!silent){ beep("warn"); showBanner("CD minimum is $25"); } return false; }
+  const monthsRemaining = 12 - state.day + 1;
+  if(monthsRemaining < term.months){ if(!silent){ beep("warn"); showBanner("Not enough time left in the year for that CD term"); } return false; }
+  const finishCreate=()=>{
+    state.bank.cds.push({ id:`cd_${Date.now()}_${Math.random().toString(36).slice(2,6)}`, term:termKey, name:term.name, apr:term.apr, termMonths:term.months, monthsLeft:term.months, principal:deposit, accrued:0 });
+    state.bank.savingsType = 'cd';
+    renderHeader(); renderSheet(); renderCDStatus();
+    return true;
+  };
+  if(source==='bonus'){ finishCreate(); return true; }
+  chooseFundingSource(deposit, `Choose where to take ${money(deposit)} for your ${term.name}.`, ()=>{
+    finishCreate(); addLedgerLine(`Opened ${term.name} for ${money(deposit)}`); notifyAction('open_cd');
+  });
+  return 'pending';
+}
+
+function transferToSavings(){
+  const amt = Number($("transferAmt").value || 0);
+  if(state.bank.checking < amt){
+    beep("warn");
+    showBanner("Not enough in checking");
+    return;
+  }
+  state.bank.checking -= amt;
+  state.bank.savings += amt;
+  addLedgerLine(`Transfer: ${money(amt)} from checking to savings`);
+  renderHeader();
+  renderSheet();
+  notifyAction("transfer_savings");
+}
+function transferToChecking(){
+  const amt = Number($("transferAmt").value || 0);
+  if(state.bank.savings < amt){
+    beep("warn");
+    showBanner("Not enough in savings");
+    return;
+  }
+  state.bank.savings -= amt;
+  state.bank.checking += amt;
+  addLedgerLine(`Transfer: ${money(amt)} from savings to checking`);
+  renderHeader();
+  renderSheet();
+  notifyAction("transfer_savings");
+}
+
+function renderSheet(){
+  if(!$("sheetBox")) return;
+  const totalIncome = state.plan.income;
+  const wantsTotal = state.plan.wants + state.plan.wantsExtras;
+  const savingsDebt = state.plan.save + state.plan.debtPay;
+  const activeJob = state.jobs[state.jobIndex];
+  const lines = [
+    "WGLT BUDGET SHEET",
+    `Job: ${activeJob.name}`,
+    `Year Plan: ${getBudgetModelName()}${state.plan.lockedForYear ? " (Locked)" : ""}`,
+    "",
+    `INCOME`,
+    `  Wage .................. ${money(totalIncome)}`,
+    "",
+    `NEEDS`,
+    `  Needs budget .......... ${money(state.plan.needs)}`,
+    `  Insurance ............. ${state.plan.insurance[0].toUpperCase()+state.plan.insurance.slice(1)}`,
+    "",
+    `WANTS`,
+    `  Wants budget .......... ${money(wantsTotal)}`,
+    "",
+    `SAVINGS & DEBT`,
+    `  Savings ............... ${money(state.plan.save)}`,
+    `  Debt pay .............. ${money(state.plan.debtPay)}`,
+    `  Savings goal .......... ${state.savingsGoal ? money(state.savingsGoal) : "Not set"}`,
+    "",
+    `LIVE ACCOUNTS`,
+    `  Checking .............. ${money(state.bank.checking)}`,
+    `  Savings ............... ${money(state.bank.savings)}`,
+    `  Active CDs ............ ${state.bank.cds.length}`,
+    `  High-yield principal .. ${money(state.bank.hysaPrincipal)}`,
+    `  High-yield growth ..... ${money(state.bank.hysaAccrued)}`,
+    `  CD value total ........ ${money(totalCdFunds())}`,
+    `  Credit score .......... ${state.credit}`,
+    "",
+    `JOB LEDGER`,
+    `  Month expenses ........ ${money(state.ledger.weekExpenses)}`,
+    `  Month profit .......... ${money(state.ledger.weekProfit)}`,
+    "",
+    `NOTES`,
+    `  High-Yield startup fee  $25 cash`,
+    `  CD choices ............ 3 mo (4.0%), 6 mo (4.5%), 1 yr (5.0%)`,
+    `  Current growth ........ ${getSavingsMonthlyGrowth().note}`
+  ];
+  $("sheetBox").textContent = lines.join("\n");
+}
+
 /* Startup chooser: bank + insurance (tap only) */
 function startupChoose(){
-  const body =
-`Choose Checking:
-• Student (no monthly fee)
-• Standard ($5 monthly fee)
-• Rewards ($10 monthly fee)
+  function choiceCard(label, note, selected, action){
+    return `<button class="choice-btn ${selected ? 'selected' : ''}" data-startup-action="${action}">${label}<small>${note}</small></button>`;
+  }
 
-Choose Savings:
-• Basic (0.5% APR)
-• High-Yield (4% APR, needs $100 minimum)
-• CD Locked (5% APR, withdrawals cost penalty)
+  function renderStartupModal(){
+    $("mTitle").textContent = "🏦 Startup: Bank + Insurance";
+    $("mMeta").textContent = state.teacherMode ? `Bucket #1: ${BENCH[1]} • Bucket #6: ${BENCH[6]} • Bucket #12: ${BENCH[12]}` : "Bucket #1 • #6 • #12";
 
-Choose Insurance:
-• None, Basic, Strong`;
+    $("mBody").innerHTML = `
+      <div style="font-weight:1000">Pick a checking account, choose a savings path, fund your new accounts with cash, then choose insurance. Your choices stay highlighted.</div>
+      <div class="impact-box" style="margin-top:12px">Starter Cash
+You begin with ${money(state.cash)} in cash.
+• Checking starts at $0.
+• Savings starts at $0.
+• High-Yield needs $30 sent into savings first, so $25 can move into high-yield and $5 stays behind to keep savings open.
+• CDs use cash, checking, or savings above the $5 safety floor.</div>
 
-  openModal({
-    title:"🏦 Startup: Bank + Insurance",
-    meta: state.teacherMode ? `Bucket #1: ${BENCH[1]} • Bucket #6: ${BENCH[6]} • Bucket #12: ${BENCH[12]}` : "Bucket #1 • #6 • #12",
-    body,
-    buttons:[
-      {id:"c_student",label:"Checking: Student",kind:"primary"},
-      {id:"c_standard",label:"Checking: Standard",kind:"secondary"},
-      {id:"c_rewards",label:"Checking: Rewards",kind:"secondary"},
-      {id:"s_basic",label:"Savings: Basic",kind:"primary"},
-      {id:"s_hysa",label:"Savings: High-Yield",kind:"secondary"},
-      {id:"s_cd",label:"Savings: CD Locked",kind:"secondary"},
-      {id:"i_none",label:"Insurance: None",kind:"warn"},
-      {id:"i_basic",label:"Insurance: Basic",kind:"primary"},
-      {id:"i_strong",label:"Insurance: Strong",kind:"secondary"},
-      {id:"done",label:"Done",kind:"success"}
-    ],
-    onPick:(id)=>{
-      if(id==="c_student") state.bank.checkingType="student";
-      if(id==="c_standard") state.bank.checkingType="standard";
-      if(id==="c_rewards") state.bank.checkingType="rewards";
+      <div style="margin-top:12px;font-weight:1100">Starter Funding</div>
+      <div class="choice-grid">
+        ${[0,25,50,100].map(val => choiceCard(`Checking Deposit ${money(val)}`, 'Move cash into checking', state.bank.startCheckingDeposit===val, `d_check_${val}`)).join('')}
+        ${[0,5,10,25,30,50].map(val => choiceCard(`Savings Deposit ${money(val)}`, 'Move cash into savings', state.bank.startSavingsDeposit===val, `d_save_${val}`)).join('')}
+      </div>
 
-      if(id==="s_basic") state.bank.savingsType="basic";
-      if(id==="s_hysa") state.bank.savingsType="hysa";
-      if(id==="s_cd") state.bank.savingsType="cd";
+      <div style="margin-top:12px;font-weight:1100">1) Checking Account</div>
+      <div class="choice-grid">
+        ${choiceCard('Student Checking', 'No monthly checking fee. Overdraft fee is $20.', state.bank.checkingType==='student', 'c_student')}
+        ${choiceCard('Standard Checking', '$5 monthly fee from savings. Overdraft fee is $10.', state.bank.checkingType==='standard', 'c_standard')}
+        ${choiceCard('Rewards Checking', '$10 monthly fee from savings. Overdraft fee is waived.', state.bank.checkingType==='rewards', 'c_rewards')}
+      </div>
 
-      if(id==="i_none") state.plan.insurance="none";
-      if(id==="i_basic") state.plan.insurance="basic";
-      if(id==="i_strong") state.plan.insurance="strong";
+      <div style="margin-top:14px;font-weight:1100">2) Savings Account</div>
+      <div class="choice-grid">
+        ${choiceCard('Regular Savings', '0.5% APR and no minimum.', state.bank.savingsType==='basic', 's_basic')}
+        ${choiceCard('High-Yield Savings', '4% APR with just a $25 minimum.', state.bank.savingsType==='hysa', 's_hysa')}
+        ${choiceCard('CD Builder', 'Open CDs in 3, 6, or 12 month terms.', state.bank.savingsType==='cd', 's_cd')}
+      </div>
 
-      renderHeader();
+      <div style="margin-top:14px;font-weight:1100">3) Insurance</div>
+      <div class="choice-grid">
+        ${choiceCard('None', 'Keeps more money now, but emergencies hit harder.', state.plan.insurance==='none', 'i_none')}
+        ${choiceCard('Basic', 'Balanced protection for common surprises. $8/mo.', state.plan.insurance==='basic', 'i_basic')}
+        ${choiceCard('Strong', 'Best protection against surprise costs. $15/mo.', state.plan.insurance==='strong', 'i_strong')}
+      </div>
 
-      if(id==="done"){
-        if(!state.bank.checkingType || !state.bank.savingsType || !state.plan.insurance){
-          beep("warn");
-          openModal({
-            title:"Not finished",
-            meta:"Pick all three",
-            body:"Select a Checking type, a Savings type, and an Insurance level, then tap Done.",
-            buttons:[{id:"close",label:"Close",kind:"secondary"}]
-          });
+      <div class="impact-box">${getChoiceImpactText().split('\n').join('<br>')}</div>
+    `;
+
+    const foot = $("mFoot");
+    foot.innerHTML = '';
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'btn secondary';
+    closeBtn.textContent = 'Close';
+    closeBtn.onclick = ()=>{ beep('click'); closeModal(); };
+
+    const doneBtn = document.createElement('button');
+    doneBtn.className = 'btn success' + (startupSelectionComplete() ? ' done-ready' : '');
+    doneBtn.textContent = startupSelectionComplete() ? 'Done ✓' : 'Done';
+    doneBtn.onclick = ()=>{
+      if(!startupSelectionComplete()){
+        beep('warn');
+        showBanner(state.bank.savingsType==='hysa' ? 'High-yield needs $30 in savings first' : 'Finish your startup choices first');
+        return;
+      }
+      const totalDeposit = Number(state.bank.startCheckingDeposit || 0) + Number(state.bank.startSavingsDeposit || 0);
+      if(totalDeposit > state.cash){
+        beep('warn');
+        showBanner('That uses more cash than you have');
+        return;
+      }
+      state.cash -= Number(state.bank.startCheckingDeposit || 0);
+      state.bank.checking += Number(state.bank.startCheckingDeposit || 0);
+      state.cash -= Number(state.bank.startSavingsDeposit || 0);
+      state.bank.savings += Number(state.bank.startSavingsDeposit || 0);
+
+      if(state.bank.savingsType === 'hysa'){
+        if(state.bank.savings < 30){
+          beep('warn');
+          showBanner('High-yield needs $30 in savings first');
           return;
         }
-        setLog("Startup complete: bank + insurance selected.");
-        notifyAction("startup_choose");
+        state.bank.savings -= 25;
+        state.bank.hysaPrincipal += 25;
+        state.bank.startupFeePaid = true;
       }
-    }
-  });
+      beep('success');
+      closeModal();
+      setLog('Startup complete: bank + insurance selected and funded.');
+      renderHeader();
+      renderSheet();
+      notifyAction('startup_choose');
+    };
+
+    foot.appendChild(closeBtn);
+    foot.appendChild(doneBtn);
+
+    $("overlay").classList.add('show');
+    $("overlay").setAttribute('aria-hidden','false');
+
+    document.querySelectorAll('[data-startup-action]').forEach(btn=>{
+      btn.onclick = ()=>{
+        const id = btn.dataset.startupAction;
+        if(id==='c_student') state.bank.checkingType='student';
+        if(id==='c_standard') state.bank.checkingType='standard';
+        if(id==='c_rewards') state.bank.checkingType='rewards';
+        if(id==='s_basic') state.bank.savingsType='basic';
+        if(id==='s_hysa') state.bank.savingsType='hysa';
+        if(id==='s_cd') state.bank.savingsType='cd';
+        if(id==='i_none') state.plan.insurance='none';
+        if(id==='i_basic') state.plan.insurance='basic';
+        if(id==='i_strong') state.plan.insurance='strong';
+        if(id.startsWith('d_check_')) state.bank.startCheckingDeposit = Number(id.replace('d_check_',''));
+        if(id.startsWith('d_save_')) state.bank.startSavingsDeposit = Number(id.replace('d_save_',''));
+        beep('click');
+        renderHeader();
+        renderStartupModal();
+      };
+    });
+  }
+
+  renderStartupModal();
 }
 
 /* Savings challenge */
 function openSavingsChallenge(){
-  const body =
-`Pick a monthly savings goal.
-Milestones give rewards:
+  const options = [50,100,200,300,500];
+
+  function renderSavingsModal(){
+    $("mTitle").textContent = "🏁 Savings Challenge";
+    $("mMeta").textContent = "Pick a goal and keep it highlighted";
+    $("mBody").innerHTML = `
+      <div style="font-weight:1000">Pick a year-end savings goal. Your choice stays highlighted when you come back.</div>
+      <div class="choice-grid" style="margin-top:12px">
+        ${options.map(goal => `<button class="choice-btn ${state.savingsGoal===goal ? 'selected' : ''}" data-goal="${goal}">Goal: ${money(goal)}<small>Track progress all year long</small></button>`).join('')}
+      </div>
+      <div class="impact-box" style="margin-top:12px">Current Goal
+${state.savingsGoal ? `${money(state.savingsGoal)} by Month 12` : 'Not set yet'}
+
+Rewards
 • 25% goal: +$5 bonus
 • 50% goal: +$10 bonus
 • 75% goal: +$15 bonus
-• 100% goal: +$25 bonus (grand prize)
+• 100% goal: +$25 bonus</div>`;
 
-You can set or change the goal once, early in the month.`;
+    const foot = $("mFoot");
+    foot.innerHTML = '';
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'btn secondary';
+    closeBtn.textContent = 'Close';
+    closeBtn.onclick = ()=>{ beep('click'); closeModal(); };
 
-  openModal({
-    title:"🏁 Savings Challenge",
-    meta: "Tap-only goal selection",
-    body,
-    buttons:[
-      {id:"g50",label:"Goal: $50",kind:"secondary"},
-      {id:"g100",label:"Goal: $100",kind:"primary"},
-      {id:"g200",label:"Goal: $200",kind:"secondary"},
-      {id:"g300",label:"Goal: $300",kind:"secondary"},
-      {id:"close",label:"Close",kind:"secondary"}
-    ],
-    onPick:(id)=>{
-      const map={g50:50,g100:100,g200:200,g300:300};
-      const goal = map[id] || 0;
-      if(goal>0){
-        state.savingsGoal = goal;
-        setLog(`Savings challenge set: ${money(goal)} by Day 30.`);
-        renderHeader();
-        notifyAction("savings_goal");
+    const doneBtn = document.createElement('button');
+    doneBtn.className = 'btn success' + (state.savingsGoal ? ' done-ready' : '');
+    doneBtn.textContent = state.savingsGoal ? 'Done ✓' : 'Done';
+    doneBtn.onclick = ()=>{
+      if(!state.savingsGoal){
+        beep('warn');
+        showBanner('Choose a savings goal first');
+        return;
       }
-    }
-  });
+      beep('success');
+      closeModal();
+      setLog(`Savings challenge set: ${money(state.savingsGoal)} by Month 12.`);
+      renderHeader();
+      notifyAction("savings_goal");
+    };
+    foot.appendChild(closeBtn);
+    foot.appendChild(doneBtn);
+
+    $("overlay").classList.add('show');
+    $("overlay").setAttribute('aria-hidden','false');
+    document.querySelectorAll('[data-goal]').forEach(btn=>{
+      btn.onclick = ()=>{
+        state.savingsGoal = Number(btn.dataset.goal);
+        beep('click');
+        renderHeader();
+        renderSavingsModal();
+      };
+    });
+  }
+  renderSavingsModal();
 }
 
 function checkSavingsMilestones(){
@@ -1581,9 +2422,9 @@ function checkSavingsMilestones(){
   hits.forEach(h=>{
     if(pct>=h.thr && !state.savingsMilestones.has(h.k)){
       state.savingsMilestones.add(h.k);
-      state.bank.checking += h.bonus;
+      state.bank.savings += h.bonus;
       showBanner(`Savings milestone ${h.k}%! +${money(h.bonus)} reward`);
-      addLedgerLine(`Savings milestone ${h.k}% reward +${money(h.bonus)} (to checking)`);
+      addLedgerLine(`Savings milestone ${h.k}% reward +${money(h.bonus)} (to savings)`);
       addCoverage(12);
     }
   });
@@ -1591,44 +2432,112 @@ function checkSavingsMilestones(){
 
 /* Suggested plan */
 function suggestedPlan(){
-  const income=state.plan.income;
-  const needs=Math.round(income*0.50);
-  const baseWants=Math.round(income*0.20);
-  const save=Math.round(income*0.20);
-  const debt=Math.round(income*0.10);
-
-  openModal({
-    title:"📊 Suggested Plan (Math shown)",
-    meta:"50/20/20/10 model",
-    body:
-`Income: ${money(income)}
-
-Needs (50%): ${money(needs)}
-Wants (20%): ${money(baseWants)}  + Want extras (dropdown)
-Savings (20%): ${money(save)}
-Debt (10%): ${money(debt)}
-
-Apply this plan?`,
-    buttons:[
-      {id:"apply",label:"Apply This Plan",kind:"success"},
-      {id:"close",label:"Close",kind:"secondary"}
-    ],
-    onPick:(id)=>{
-      if(id==="apply"){
-        state.plan.needs=needs;
-        state.plan.wants=baseWants;
-        state.plan.save=save;
-        state.plan.debtPay=debt;
-        renderHeader();
-        setLog("Suggested plan applied (base amounts).");
-        notifyAction("suggested_plan");
-      }
+  const income = state.plan.income;
+  const models = {
+    rule702010: {
+      name:'70-20-10 Rule',
+      meta:'70% needs • 20% savings and debt • 10% wants',
+      needs: Math.round(income*0.70),
+      wantsTarget: Math.round(income*0.10),
+      savingsDebt: Math.round(income*0.20),
+      note:'Default classroom rule. Needs get 70%, savings plus debt share 20%, and the student builds wants to at least 10%.'
+    },
+    rule503020: {
+      name:'50-30-20 Rule',
+      meta:'50% needs • 30% wants • 20% savings and debt',
+      needs: Math.round(income*0.50),
+      wantsTarget: Math.round(income*0.30),
+      savingsDebt: Math.round(income*0.20),
+      note:'Second classroom rule. Needs get 50%, wants rise to 30%, and savings plus debt still hold 20%.'
     }
-  });
+  };
+
+  function renderPlanModal(){
+    const chosen = state.plan.model || 'rule702010';
+    const m = models[chosen];
+    const split = splitSavingsDebt(m.savingsDebt);
+    $("mTitle").textContent = '📊 Year Plan';
+    $("mMeta").textContent = state.plan.lockedForYear ? 'Locked for this year mission' : m.meta;
+    $("mBody").innerHTML = `
+      <div style="font-weight:1000">Choose the budget style for the whole year. Wants now start at $0 and must be built by the player from the wants list before the mission can start.</div>
+      <div class="choice-grid" style="margin-top:12px">
+        ${Object.entries(models).map(([key,val]) => `<button class="choice-btn ${chosen===key ? 'selected' : ''}" data-model="${key}">${val.name}<small>${val.note}</small></button>`).join('')}
+      </div>
+      <div class="impact-box" style="margin-top:12px">${m.name}
+Income: ${money(income)}
+Needs: ${money(m.needs)}
+Wants target to build: ${money(m.wantsTarget)}
+Savings + Debt: ${money(m.savingsDebt)}
+Auto split inside that bucket: Savings ${money(split.save)} • Debt ${money(split.debt)}
+
+${state.plan.lockedForYear ? 'This plan is already locked for the current year.' : 'Pick the rule you want to teach, then build wants from the dropdown on the Plan tab.'}</div>`;
+
+    const foot = $("mFoot");
+    foot.innerHTML = '';
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'btn secondary';
+    closeBtn.textContent = 'Close';
+    closeBtn.onclick = ()=>{ beep('click'); closeModal(); };
+
+    const applyBtn = document.createElement('button');
+    applyBtn.className = 'btn success' + (state.plan.lockedForYear ? '' : ' done-ready');
+    applyBtn.textContent = state.plan.lockedForYear ? 'Locked ✓' : 'Use This Rule';
+    applyBtn.onclick = ()=>{
+      if(state.plan.lockedForYear){ beep('warn'); showBanner('Year plan already locked'); return; }
+      state.plan.model = chosen;
+      applyBudgetModel(chosen);
+      closeModal();
+      renderAll();
+      guidePreStart();
+      showBanner(`${models[chosen].name} selected. Lock it in next.`);
+      setLog(`${models[chosen].name} selected. Tap Lock Plan for Year to lock this rule, then choose a job.`);
+    };
+    foot.appendChild(closeBtn);
+    foot.appendChild(applyBtn);
+
+    $("overlay").classList.add('show');
+    $("overlay").setAttribute('aria-hidden','false');
+    document.querySelectorAll('[data-model]').forEach(btn=>{
+      btn.onclick = ()=>{
+        if(state.plan.lockedForYear){ beep('warn'); showBanner('Year plan already locked'); return; }
+        state.plan.model = btn.dataset.model;
+        beep('click');
+        renderPlanModal();
+      };
+    });
+  }
+  renderPlanModal();
 }
 
 /* Apply Plan */
 function applyPlan(){
+  if(state.plan.lockedForYear){
+    beep("warn");
+    showBanner("Year plan already locked");
+    return;
+  }
+  state.plan.lockedForYear = true;
+  state.plan.appliedMonths = new Set();
+  if(state.mission.active){
+    state.plan.appliedMonths.add(state.day);
+    applyMonthlyPlanForCurrentMonth();
+    setLog(`${getBudgetModelName()} locked for the year and applied for Month ${state.day}.`);
+    notifyAction("apply_plan");
+  } else {
+    state.plan.wantsCommitted = false;
+    setLog(`${getBudgetModelName()} locked. Step 2: choose a student job, then build wants and start the year mission.`);
+    showBanner("Year plan locked. Now choose a student job.");
+  }
+  beep("success");
+  renderHeader();
+  renderSheet();
+  guidePreStart();
+}
+
+function applyMonthlyPlanForCurrentMonth(){
+  if(state.plan.appliedMonths.has(state.day) && state.plan.lockedForYear && state.day !== 1){
+    return;
+  }
   const gross=state.plan.income;
   const tax=Math.round(gross*(state.plan.taxPct/100));
   const takeHome=gross-tax;
@@ -1645,60 +2554,99 @@ function applyPlan(){
 
   state.bank.checking -= state.plan.debtPay;
   state.credit = clamp(state.credit + Math.round(state.plan.debtPay/5), 300, 850);
+  const insuranceCost = state.plan.insurance==='basic' ? 8 : state.plan.insurance==='strong' ? 15 : 0;
+  if(insuranceCost>0){
+    state.bank.checking -= insuranceCost;
+    state.ledger.weekExpenses += insuranceCost;
+    addLedgerLine(`Insurance premium: -${money(insuranceCost)}`);
+  }
+  state.plan.appliedMonths.add(state.day);
 
   if(state.bank.checking < 0){
     const ct = state.bank.checkingType ? BANK_PRODUCTS.checking.find(x=>x.id===state.bank.checkingType) : null;
     const fee = ct ? ct.overdraftFee : 15;
-    state.bank.checking -= fee;
+    if(fee>0){
+      state.bank.checking -= fee;
+      addLedgerLine(`Overdraft fee: -${money(fee)}`);
+      setLog(`Overdraft! Fee ${money(fee)} applied. Credit -12.`);
+    } else {
+      addLedgerLine('Overdraft fee waived by Rewards Checking.');
+      setLog('Overdraft happened, but Rewards Checking waived the fee. Credit -12.');
+    }
     state.credit = clamp(state.credit - 12, 300, 850);
     beep("warn");
-    setLog(`Overdraft! Fee ${money(fee)} applied. Credit -12.`);
-    addLedgerLine(`Overdraft fee: -${money(fee)}`);
   }else{
-    setLog(`Plan applied. Take-home: ${money(takeHome)} (Tax: ${money(tax)})`);
+    setLog(`Month ${state.day} auto-ran with your year plan. Take-home: ${money(takeHome)} (Tax: ${money(tax)})`);
   }
 
   recalcProfit();
   renderHeader();
   renderLedger();
-  notifyAction("apply_plan");
+  renderSheet();
 }
 
-/* Weekly bank effects */
+/* Monthly bank effects */
 function applyWeeklyBankEffects(){
   const ct = state.bank.checkingType ? BANK_PRODUCTS.checking.find(x=>x.id===state.bank.checkingType) : null;
   if(ct && ct.monthlyFee>0){
-    const weeklyFee = Math.round(ct.monthlyFee/4);
-    state.bank.checking -= weeklyFee;
-    addLedgerLine(`Bank fee: -${money(weeklyFee)}`);
+    const takenFromSavings = Math.min(state.bank.savings, ct.monthlyFee);
+    state.bank.savings -= takenFromSavings;
+    const remainder = ct.monthlyFee - takenFromSavings;
+    if(remainder>0) state.bank.checking -= remainder;
+    addLedgerLine(`Bank fee: -${money(ct.monthlyFee)} (${takenFromSavings ? 'from savings' : 'from checking'})`);
   }
-
   const st = state.bank.savingsType ? BANK_PRODUCTS.savings.find(x=>x.id===state.bank.savingsType) : null;
   if(st){
-    const weeklyRate=(st.apr/100)/52;
-    let eligible=true;
-    if(st.id==="hysa" && state.bank.savings < st.minBalance) eligible=false;
-
-    const interest = eligible ? Math.max(0, Math.round(state.bank.savings * weeklyRate)) : 0;
-    state.bank.savings += interest;
-    if(interest>0) addLedgerLine(`Savings interest: +${money(interest)}`);
-    addCoverage(9); addCoverage(12);
+    if(st.id==="basic"){
+      const interest = Math.max(0, Math.round(state.bank.savings * (st.apr/100)));
+      state.bank.savings += interest;
+      if(interest>0) addLedgerLine(`Savings growth: +${money(interest)} for Month ${state.day} at ${st.apr}%`);
+    } else if(st.id==="hysa"){
+      if(state.bank.hysaPrincipal > 0){
+        const interest = Math.max(0, Math.round(state.bank.hysaPrincipal * (st.apr/100)));
+        state.bank.hysaAccrued += interest;
+        state.bank.hysaPrincipal += interest;
+        if(interest>0) addLedgerLine(`High-yield growth: +${money(interest)} for Month ${state.day} at ${st.apr}%`);
+        state.credit = clamp(state.credit + 1, 300, 850);
+      } else addLedgerLine('High-yield is selected, but it still needs funding.');
+    } else if(!state.bank.cds.length) addLedgerLine('CD Builder selected, but no CD is open yet.');
+    addCoverage(4); addCoverage(5);
   }
+  state.bank.cds.forEach(cd=>{ const monthlyInterest=Math.max(0,Math.round(cd.principal*(cd.apr/100))); cd.accrued += monthlyInterest; cd.principal += monthlyInterest; cd.monthsLeft -= 1; addLedgerLine(`${cd.name}: +${money(monthlyInterest)} growth this month`); });
+  const matured = state.bank.cds.filter(cd=>cd.monthsLeft<=0);
+  if(matured.length){ matured.forEach(cd=>{ const payout=cd.principal; state.bank.savings += payout; state.credit = clamp(state.credit + (cd.termMonths >= 12 ? 2 : 1), 300, 850); addLedgerLine(`${cd.name} matured: +${money(payout)} returned to savings`); }); state.bank.cds = state.bank.cds.filter(cd=>cd.monthsLeft>0); }
+  updateImpactStrip(); renderCDStatus(); renderBucketTracker(); renderMeters();
 }
 
-/* Next week */
+/* Next month */
 function nextWeek(){
-  state.day = clamp(state.day + 7, 1, 30);
-
-  applyWeeklyBankEffects();
-  checkSavingsMilestones();
-
-  state.ledger.weekExpenses = 0;
-  state.ledger.weekIncome = 0;
-  state.ledger.weekProfit = 0;
-  addLedgerLine(`--- New week started (Day ${state.day}) ---`);
+  if(state.day >= 12){
+    renderAll();
+    notifyAction("next_week");
+    return;
+  }
+  if(state.plan.lockedForYear){
+    applyWeeklyBankEffects();
+    checkSavingsMilestones();
+    state.day = clamp(state.day + 1, 1, 12);
+    state.ledger.weekExpenses = 0;
+    state.ledger.weekIncome = 0;
+    state.ledger.weekProfit = 0;
+    addLedgerLine(`--- New month started (Month ${state.day}) ---`);
+    applyMonthlyPlanForCurrentMonth();
+  } else {
+    applyWeeklyBankEffects();
+    checkSavingsMilestones();
+    state.day = clamp(state.day + 1, 1, 12);
+    state.ledger.weekExpenses = 0;
+    state.ledger.weekIncome = 0;
+    state.ledger.weekProfit = 0;
+    addLedgerLine(`--- New month started (Month ${state.day}) ---`);
+    setLog("Choose and lock a year plan before the next month auto-runs.");
+  }
 
   renderAll();
+  renderSheet();
   notifyAction("next_week");
 }
 
@@ -1732,23 +2680,23 @@ function triggerInheritance(){
     title:"🧾 Inheritance Event",
     meta: state.teacherMode ? `Bucket #5: ${BENCH[5]} • Bucket #3: ${BENCH[3]}` : "Bucket #5 • Bucket #3",
     body:"You receive $200. Choose what to do:",
-    buttons:[
-      {id:"save",label:"Save it",kind:"success"},
-      {id:"spend",label:"Spend it",kind:"warn"},
-      {id:"invest",label:"Invest it",kind:"primary"}
-    ],
+    buttons:[{id:"save",label:"Save it",kind:"success"},{id:"spend",label:"Spend it",kind:"warn"},{id:"invest",label:"Invest it",kind:"primary"}],
     onPick:(id)=>{
-      if(id==="save"){ state.bank.savings += 200; state.credit=clamp(state.credit+3,300,850); addLedgerLine("Inheritance saved: +$200 to savings"); }
-      if(id==="spend"){ state.cash = clamp(state.cash + 200 - 80, 0, 999999); state.credit=clamp(state.credit-2,300,850); addLedgerLine("Inheritance spent (wants): +$200 then -$80"); }
-      if(id==="invest"){
-        const up=Math.random()<0.55;
-        const delta=up?120:-70;
-        state.bank.savings += 200 + delta;
-        state.credit=clamp(state.credit+(up?4:-4),300,850);
-        addLedgerLine(up ? "Inheritance invested: gain +$120" : "Inheritance invested: loss -$70");
-      }
-      renderHeader();
-      notifyAction("inheritance");
+      if(id==="save"){ state.bank.savings += 200; state.credit=clamp(state.credit+3,300,850); addLedgerLine("Inheritance saved: +$200 to savings"); renderHeader(); renderSheet(); notifyAction("inheritance"); return; }
+      if(id==="spend"){ state.cash = clamp(state.cash + 200 - 80, 0, 999999); state.plan.wants += 20; state.credit=clamp(state.credit-2,300,850); addLedgerLine("Inheritance spent (wants): +$200 then -$80"); renderHeader(); renderSheet(); notifyAction("inheritance"); return; }
+      const monthsRemaining = 12 - state.day + 1;
+      if(monthsRemaining < 3){ beep('warn'); showBanner('Less than 3 months left. Investing is locked.'); return; }
+      openModal({
+        title:"Invest the Inheritance",
+        meta:"Choose where the money goes",
+        body:`Months left in year: ${monthsRemaining}. Choose an option that fits the time remaining.`,
+        buttons:[{id:"hysa",label:"Deposit to High-Yield",kind:"success"},{id:"cd3",label:`3-Month CD${monthsRemaining<3?' (Locked)':''}`,kind:"secondary"},{id:"cd6",label:`6-Month CD${monthsRemaining<6?' (Locked)':''}`,kind:"secondary"},{id:"cd12",label:`1-Year CD${monthsRemaining<12?' (Locked)':''}`,kind:"primary"}],
+        onPick:(pick)=>{
+          if(pick==="hysa"){ state.bank.savingsType='hysa'; state.bank.hysaPrincipal += 200; state.credit=clamp(state.credit+4,300,850); addLedgerLine("Inheritance invested into high-yield savings: +$200"); }
+          else { const term = pick==="cd3" ? "3m" : pick==="cd6" ? "6m" : "12m"; if((term==='3m'&&monthsRemaining<3)||(term==='6m'&&monthsRemaining<6)||(term==='12m'&&monthsRemaining<12)){ beep('warn'); showBanner('That CD term does not fit the time left in the year'); return; } createCD(term,200,true,'bonus'); state.bank.savingsType='cd'; state.credit=clamp(state.credit+4,300,850); addLedgerLine(`Inheritance invested into ${BANK_PRODUCTS.cdTerms[term].name}: $200`); }
+          renderHeader(); renderSheet(); notifyAction("inheritance");
+        }
+      });
     }
   });
 }
@@ -1876,79 +2824,67 @@ function depositCheck(){
 
 /* Wants dropdown add-on */
 function addWantExtra(){
-  const v = parseInt($("wantsPick").value,10) || 0;
-  if(v<=0) return;
-  state.plan.wantsExtras = clamp(state.plan.wantsExtras + v, 0, 200);
+  const selected = getSelectedWantInputs();
+  const total = selected.reduce((sum,o)=>sum + Number(o.value||0), 0);
+  const target = getWantsTargetAmount();
+  if(total < target){
+    beep("warn");
+    showBanner(`Choose wants totaling at least ${money(target)}`);
+    updateWantsUI();
+    return;
+  }
+  state.plan.wantsSelections = selected.map(o=>({label:o.dataset.label || o.parentElement?.innerText?.trim() || `Want ${o.value}`, value:Number(o.value||0)}));
+  state.plan.wants = total;
+  state.plan.wantsExtras = 0;
+  state.plan.wantsCommitted = true;
   renderHeader();
-  addLedgerLine(`Want chosen: +${money(v)} (wants add-on)`);
+  renderSheet();
+  updateWantsUI();
+  addLedgerLine(`Wants plan locked in at ${money(total)}.`);
 }
 function clearWantsExtras(){
+  state.plan.wantsSelections = [];
+  state.plan.wants = 0;
   state.plan.wantsExtras = 0;
+  state.plan.wantsCommitted = false;
+  if($("wantsPick")) $("wantsPick").querySelectorAll('input[type="checkbox"]').forEach(o=> o.checked = false);
+  syncWantsChecklistStyles();
   renderHeader();
-  addLedgerLine("Wants add-ons cleared.");
+  renderSheet();
+  updateWantsUI();
+  addLedgerLine("Wants plan cleared.");
 }
 
-/* Real-life events (kept from your version, unchanged logic) */
+/* Real-life events */
 function runJobRealLifeEvent(){
   const job = state.jobs[state.jobIndex];
-  const week = currentWeekIndex();
-
-  function requireInventory(itemId, fallbackCost, itemName){
-    if(invQty(itemId)>0){
-      setInvQty(itemId, invQty(itemId)-1);
-      addLedgerLine(`Used inventory: ${itemName} (no extra cost)`);
-      return true;
-    }
-    payFromCheckingThenCashThenSavings(fallbackCost);
-    state.ledger.weekExpenses += fallbackCost;
-    addLedgerLine(`No inventory. Paid rush cost: -${money(fallbackCost)} for ${itemName}`);
-    return false;
+  const month = currentWeekIndex();
+  function useInventoryOrPay(itemId, fallbackCost, itemName, onDone){
+    if(invQty(itemId)>0){ setInvQty(itemId, invQty(itemId)-1); addLedgerLine(`Used inventory: ${itemName} (no extra cost)`); onDone && onDone(true); recalcProfit(); renderAll(); notifyAction("job_event"); return; }
+    chooseFundingSource(fallbackCost, `No ${itemName} left in inventory. Rush price is ${money(fallbackCost)}.`, ()=>{ state.ledger.weekExpenses += fallbackCost; addLedgerLine(`No inventory. Paid rush cost for ${itemName}.`); onDone && onDone(false); recalcProfit(); renderAll(); notifyAction("job_event"); });
   }
-
-  const events = {
-    lawn: [
-      { title:"⛽ Lawn Care: Gas decision", body:`You need gas to mow.\nOption A: Buy gas now ($12)\nOption B: Chance it (risk). If you run out: pay $12 + $8 trip.`,
-        a: ()=>{ requireInventory("gas",12,"Gas Can"); },
-        b: ()=>{ const ranOut = Math.random()<0.55; if(ranOut){ payFromCheckingThenCashThenSavings(20); state.ledger.weekExpenses += 20; addLedgerLine("Ran out of gas: -$20 (gas + trip)"); state.credit=clamp(state.credit-2,300,850);} else { addLedgerLine("Got lucky: no gas run-out"); state.credit=clamp(state.credit+1,300,850);} }
-      },
-      { title:"🛠 Lawn Care: Glove tear", body:`Your gloves tear.\nUse inventory gloves (best) or pay rush price ($9).`,
-        a: ()=>{ requireInventory("gloves",9,"Gloves"); },
-        b: ()=>{ payFromCheckingThenCashThenSavings(9); state.ledger.weekExpenses+=9; addLedgerLine("Rush gloves: -$9"); }
-      },
-      { title:"🧤 Lawn Care: Yard bags", body:`You need yard bags to finish clean-up.\nUse inventory bags or pay rush price ($8).`,
-        a: ()=>{ requireInventory("bags",8,"Yard Bags"); },
-        b: ()=>{ payFromCheckingThenCashThenSavings(8); state.ledger.weekExpenses+=8; addLedgerLine("Rush bags: -$8"); }
-      },
-      { title:"⭐ Lawn Care: Customer tip vs complaint", body:`Choose safe quality or rush.\nSafe: +$10 tip\nRush: 50% chance income -$10 next week`,
-        a: ()=>{ state.bank.checking += 10; state.ledger.weekIncome += 10; addLedgerLine("Tip earned: +$10"); },
-        b: ()=>{ const complaint = Math.random()<0.5; if(complaint){ state.plan.income = clamp(state.plan.income-10,0,500); addLedgerLine("Complaint: income -$10 next week"); } else addLedgerLine("No complaint this time"); }
-      }
-    ]
+  const packs={
+    babysitting:[['Snacks Pack', 'snacks',10],['Craft Kit','craft',12]],
+    pet:[['Pet Food','petfood',12],['Treats','treats',8]],
+    dogwalk:[['Rain Poncho','poncho',8],['Waste Bags','bags',7]],
+    lawn:[['Gas Can','gas',12],['Gloves','gloves',9]],
+    cars:[['Car Soap','soap',11],['Microfiber Towels','towels',9]],
+    tutor:[['Flash Cards','cards',9],['Markers','markers',7]],
+    chores:[['Cleaning Spray','spray',7],['Sponges','sponges',6]],
+    errands:[['Bus Pass (1 ride)','fare',6],['Reusable Bag','bag',5]],
+    crafts:[['Craft Materials','materials',14],['Stickers Pack','stickers',8]]
   };
+  const pair = (packs[job.id]||packs.lawn)[(month-1)%2];
+  const bonus = month>=3;
+  if(!bonus){
+    openModal({ title:`${job.name}: Supply decision`, meta:'Job real-life decision (tap-only)', body:`Choice (A): Use ${pair[0]} from inventory if you have it.
+Choice (B): Buy it rush for ${money(pair[2])}.
 
-  const pack = events[job.id] || events.lawn;
-  const idx = clamp(week-1,0,3);
-  const ev = pack[idx];
-
-  openModal({
-    title: ev.title,
-    meta:"Job real-life decision (tap-only)",
-    body: ev.body + "\n\nChoose one:",
-    buttons:[
-      {id:"a",label:"Option A",kind:"primary"},
-      {id:"b",label:"Option B",kind:"warn"}
-    ],
-    onPick:(id)=>{
-      if(id==="a") ev.a();
-      if(id==="b") ev.b();
-
-      if(state.plan.insurance==="strong") state.credit = clamp(state.credit+1,300,850);
-
-      recalcProfit();
-      renderAll();
-      notifyAction("job_event");
-    }
-  });
+Only the rush option costs money. If inventory is there, option A uses it for free.`, buttons:[{id:'a',label:'Option A',kind:'success'},{id:'b',label:'Option B',kind:'warn'},{id:'cancel',label:'Close',kind:'secondary'}], onPick:(id)=>{ if(id==='a') useInventoryOrPay(pair[1],pair[2],pair[0], hadInv=>{ if(hadInv){ state.plan.needs += 1; } else { state.plan.wants = Math.max(0,state.plan.wants-1); } }); else if(id==='b') chooseFundingSource(pair[2], `Rush buy ${pair[0]} for ${job.name}.`, ()=>{ state.ledger.weekExpenses += pair[2]; state.plan.needs += 1; addLedgerLine(`Rush ${pair[0]} bought for ${money(pair[2])}`); recalcProfit(); renderAll(); notifyAction('job_event'); }); } });
+    return;
+  }
+  openModal({ title:`${job.name}: Money choice`, meta:'Job real-life decision (tap-only)', body:`Choice (A): Reinvest in the job and grow savings + debt discipline.
+Choice (B): Take the easier/fun option and grow wants more.`, buttons:[{id:'a',label:'Option A',kind:'success'},{id:'b',label:'Option B',kind:'warn'},{id:'cancel',label:'Close',kind:'secondary'}], onPick:(id)=>{ if(id==='a'){ state.bank.checking += 12; state.ledger.weekIncome += 12; state.plan.save += 4; state.plan.needs += 1; addLedgerLine(`${job.name} bonus earned: +$12 and stronger saving habit.`); } else if(id==='b'){ state.bank.checking += 6; state.ledger.weekIncome += 6; state.plan.wants += 4; addLedgerLine(`${job.name} money choice leaned toward wants.`); } renderAll(); notifyAction('job_event'); } });
 }
 
 /* Compare / Goals / Help */
@@ -1957,14 +2893,20 @@ function compareBanks(){
     title:"🏦 Compare Banks",
     meta: state.teacherMode ? `Bucket #1: ${BENCH[1]} • Bucket #3: ${BENCH[3]}` : "Bucket #1 • Bucket #3",
     body:
-`Student Checking: no fee
-Standard Checking: $5/mo fee + overdraft fees
-Rewards Checking: $10/mo fee + bigger overdraft fees
+`Student Checking: no monthly checking fee. If you spend more than you have, overdraft fee = $20.
+Standard Checking: $5/mo fee taken from savings. If you spend more than you have, overdraft fee = $10.
+Rewards Checking: $10/mo fee taken from savings. If you spend more than you have, overdraft fee is waived. Any reward bonus in the game goes straight into savings.
+
+Insurance:
+None: $0/mo
+Basic: $8/mo
+Strong: $15/mo
 
 Savings:
-Basic: 0.5% APR
-High-Yield: 4% APR (needs $100 min)
-CD: 5% APR (withdrawal penalty)`,
+Regular Savings: 0.5% growth each month and credit stays stable.
+High-Yield: 4% growth each month once funded.
+CD Builder: 3-Month 4.0%, 6-Month 4.5%, 1-Year 5.0% monthly classroom growth examples.
+CDs are great for steady saving, but the money is locked until maturity. Taking it out early triggers a penalty and a credit hit.`,
     buttons:[{id:"close",label:"Close",kind:"secondary"}]
   });
   addCoverage(1); addCoverage(3);
@@ -1984,15 +2926,80 @@ Goal 4: Improve credit`,
 function howToPlayModal(){
   openModal({
     title:"How to Play",
-    meta:"Month Mission flow",
+    meta:"Year Mission flow",
     body:
-`1) Start Month Mission.
-2) Do the glowing steps in order (Lock Mode can enforce).
-3) Use Ledger to buy supplies and track expenses.
-4) Use Job Events to practice risk vs reward.
-5) A contract choice is required in Week 4.
-6) Use Savings Challenge for milestone rewards.
-7) Generate report at the end.`,
+`1) Choose and lock a year plan first.
+2) Then choose a Student Job.
+3) Build your wants to the target for that plan.
+4) Tap "Start Year Mission".
+5) Once the year starts, the chosen job locks in until reset.
+6) Use your $200 cash to fund checking and savings.
+7) Follow the glowing steps in order.
+8) Use Savings Challenge, high-yield, transfers, and CDs to grow money and watch credit trends.
+9) Generate your report at the end of the year.`,
+    buttons:[{id:"close",label:"Close",kind:"secondary"}],
+    onPick:()=>{ guidePreStart(); }
+  });
+}
+function craftsWalkthroughModal(){
+  openModal({
+    title:"Selling Crafts Walkthrough",
+    meta:"Teacher example from start to finish",
+    body:
+`START SETUP
+1) On the left job card, switch to "Selling Crafts".
+2) Tap "Start Year Mission".
+3) In Banking, tap "Choose Bank + Insurance (Start)".
+4) Example setup:
+   • Student Checking
+   • Regular Savings
+   • Basic Insurance
+
+MONTH 1
+5) In Plan, tap "Suggested Plan", then "Apply Plan".
+   Example classroom plan for Selling Crafts:
+   • Monthly Income = $85
+   • Payroll Tax = 10%
+   • Needs = $35
+   • Wants = $10
+   • Savings = $20
+   • Debt Pay = $10
+6) In Business Ledger, buy "Craft Materials".
+7) In Events, tap "Run Job Real-Life Event" and talk through the choice.
+8) In Events, tap "Trigger Inheritance" and make a choice.
+9) Tap "Next Month".
+
+MONTH 2
+10) In Plan, repeat "Suggested Plan" and "Apply Plan".
+11) In Ledger, buy "Stickers Pack" or "Table Rental (Event)".
+12) In Events, tap "Run Job Real-Life Event".
+13) Still in Events, tap "Generate Local Tax (Lesson)" and then "Pay Local Tax Bill".
+14) Tap "Next Month".
+
+MONTH 3
+15) In Plan, repeat "Suggested Plan" and "Apply Plan".
+16) In Ledger, buy one craft-related item if needed.
+17) In Events, tap "Run Job Real-Life Event".
+18) In Events, tap "Start Billing Dispute" and choose how to respond.
+19) Tap "Next Month".
+
+MONTH 4
+20) In Plan, repeat "Suggested Plan" and "Apply Plan".
+21) In Ledger, buy one last item if needed.
+22) In Events, tap "Run Job Real-Life Event".
+23) In Contracts, choose a contract from the dropdown and tap "Review Selected Contract". Accept or decline it.
+24) Tap "Next Month".
+
+MONTH WRAP-UP
+25) Keep tapping "Next Month" until the year is complete.
+26) Open Reports and tap "Generate Standards Report".
+27) Review which buckets were covered during the mission.
+
+TEACHER TALKING POINTS
+• Selling Crafts works well for teaching profit because students can see income, supply costs, and trade-offs.
+• Ledger purchases lower profit, but they help complete real-life job events.
+• Local tax, billing disputes, and contracts show that running even a small business includes real money choices.
+• Savings Challenge is a good pause point to ask students what they would save for and why.`,
     buttons:[{id:"close",label:"Close",kind:"secondary"}]
   });
 }
@@ -2006,7 +3013,7 @@ function generateReport(){
 `Standards covered (${list.length}/13):
 ${lines.join("\n")}
 
-Tip: Full month mission aims to cover all buckets through repeated practice + required contract + taxes + disputes.`;
+Tip: Full year mission aims to cover all buckets through repeated practice + required contract + taxes + disputes.`;
 }
 function clearReport(){
   state.coverage=new Set();
@@ -2059,20 +3066,30 @@ Next: ${state.playlist.items[state.playlist.index]||"none"}`,
 
 /* Wire UI */
 function wire(){
-  $("toggleTeacher").addEventListener("change",(e)=>{
-    state.teacherMode=e.target.checked;
-    renderJob(); renderProgress(); applyLockRules();
-  });
-  $("toggleLock").addEventListener("change",(e)=>{ state.lockMode=e.target.checked; applyLockRules(); });
+document.querySelectorAll(".tab").forEach(t=>t.addEventListener("click",()=>openTab(t.dataset.tab)));
 
-  document.querySelectorAll(".tab").forEach(t=>t.addEventListener("click",()=>openTab(t.dataset.tab)));
-
-  $("jobPrev").onclick=()=>{ beep("click"); state.jobIndex=(state.jobIndex-1+state.jobs.length)%state.jobs.length; state.plan.income=state.jobs[state.jobIndex].pay; renderJob(); renderHeader(); };
-  $("jobNext").onclick=()=>{ beep("click"); state.jobIndex=(state.jobIndex+1)%state.jobs.length; state.plan.income=state.jobs[state.jobIndex].pay; renderJob(); renderHeader(); };
+  $("jobPrev").onclick=()=>{
+    if(!state.plan.lockedForYear){ beep("warn"); showBanner("Lock the year plan first"); openTab("plan"); guidePreStart(); return; }
+    if(state.jobLocked || state.mission.active){ beep("warn"); showBanner("Reset to change jobs"); return; }
+    beep("click");
+    state.jobIndex=(state.jobIndex-1+state.jobs.length)%state.jobs.length;
+    state.plan.income=state.jobs[state.jobIndex].pay*4;
+    applyBudgetModel(state.plan.model || "rule702010");
+    renderJob(); renderHeader(); renderSheet(); guideWantsStep();
+  };
+  $("jobNext").onclick=()=>{
+    if(!state.plan.lockedForYear){ beep("warn"); showBanner("Lock the year plan first"); openTab("plan"); guidePreStart(); return; }
+    if(state.jobLocked || state.mission.active){ beep("warn"); showBanner("Reset to change jobs"); return; }
+    beep("click");
+    state.jobIndex=(state.jobIndex+1)%state.jobs.length;
+    state.plan.income=state.jobs[state.jobIndex].pay*4;
+    applyBudgetModel(state.plan.model || "rule702010");
+    renderJob(); renderHeader(); renderSheet(); guideWantsStep();
+  };
 
   $("btnStartMission").onclick=()=>{ beep("click"); startMission(); };
   $("btnPauseMission").onclick=()=>{ beep("click"); pauseMission(); };
-  $("btnResetMission").onclick=()=>{ beep("click"); resetMission(); };
+  $("btnResetMission").onclick=()=>{ beep("click"); confirmResetMission(); };
 
   $("playlistStart").onclick=()=>{ beep("click"); startPlaylist(); };
   $("playlistPause").onclick=()=>{ state.playlist.paused=!state.playlist.paused; setLog(state.playlist.paused?"Playlist paused.":"Playlist resumed."); };
@@ -2080,13 +3097,10 @@ function wire(){
   $("btnPlaylistNext").onclick=()=>{ beep("click"); runNextPlaylistStep(); };
   $("btnPlaylistProgress").onclick=()=>{ beep("click"); playlistProgress(); };
 
-  document.querySelectorAll("[data-inc]").forEach(ch=>ch.addEventListener("click",()=>{ state.plan.income=clamp(state.plan.income+parseInt(ch.dataset.inc,10),0,500); renderHeader(); beep("click"); }));
-  $("btnIncomeToJob").onclick=()=>{ beep("click"); state.plan.income=state.jobs[state.jobIndex].pay; renderHeader(); };
   document.querySelectorAll("[data-tax]").forEach(ch=>ch.addEventListener("click",()=>{ state.plan.taxPct=parseInt(ch.dataset.tax,10); renderHeader(); beep("click"); }));
   document.querySelectorAll("[data-needs]").forEach(ch=>ch.addEventListener("click",()=>{ state.plan.needs=clamp(state.plan.needs+parseInt(ch.dataset.needs,10),0,500); renderHeader(); beep("click"); }));
   document.querySelectorAll("[data-wants]").forEach(ch=>ch.addEventListener("click",()=>{ state.plan.wants=clamp(state.plan.wants+parseInt(ch.dataset.wants,10),0,500); renderHeader(); beep("click"); }));
-  document.querySelectorAll("[data-save]").forEach(ch=>ch.addEventListener("click",()=>{ state.plan.save=clamp(state.plan.save+parseInt(ch.dataset.save,10),0,500); renderHeader(); beep("click"); }));
-  document.querySelectorAll("[data-debt]").forEach(ch=>ch.addEventListener("click",()=>{ state.plan.debtPay=clamp(state.plan.debtPay+parseInt(ch.dataset.debt,10),0,500); renderHeader(); beep("click"); }));
+  document.querySelectorAll("[data-sd]").forEach(ch=>ch.addEventListener("click",()=>{ const total = clamp((state.plan.save + state.plan.debtPay) + parseInt(ch.dataset.sd,10),0,500); setSavingsDebtTotal(total); renderHeader(); renderSheet(); beep("click"); }));
   document.querySelectorAll("[data-ins]").forEach(ch=>ch.addEventListener("click",()=>{ state.plan.insurance=ch.dataset.ins; renderHeader(); beep("click"); }));
 
   $("btnSuggestedPlan").onclick=()=> suggestedPlan();
@@ -2096,6 +3110,9 @@ function wire(){
 
   $("btnAddWant").onclick=()=> addWantExtra();
   $("btnClearWants").onclick=()=> clearWantsExtras();
+  $("wantsPick").querySelectorAll('input[type="checkbox"]').forEach(cb=>{
+    cb.onchange=()=>{ state.plan.wantsCommitted = false; syncWantsChecklistStyles(); updateWantsUI(); };
+  });
 
   document.querySelectorAll("[data-check]").forEach(ch=>ch.addEventListener("click",()=>{ state.checkAmount=clamp(state.checkAmount+parseInt(ch.dataset.check,10),0,500); renderHeader(); beep("click"); }));
   $("btnWriteCheck").onclick=()=> writeCheck();
@@ -2104,6 +3121,12 @@ function wire(){
   $("btnChooseStartup").onclick=()=> startupChoose();
   $("btnCompareBanks").onclick=()=> compareBanks();
   $("btnGoals").onclick=()=> goalsModal();
+  $("btnTransferToSavings").onclick=()=> transferToSavings();
+  if($("btnTransferToChecking")) $("btnTransferToChecking").onclick=()=> transferToChecking();
+  $("btnOpenCD").onclick=()=>{ 
+    const ok = createCD($("cdTermPick").value, Number($("cdDepositPick").value||0));
+    if(ok===true){ beep("success"); notifyAction("open_cd"); }
+  };
 
   $("btnLedgerBuy").onclick=()=> ledgerBuy();
   $("btnLedgerUse").onclick=()=> ledgerUse();
@@ -2126,6 +3149,11 @@ function wire(){
   $("btnReport").onclick=()=> generateReport();
   $("btnClearReport").onclick=()=> clearReport();
   $("btnHowToPlay").onclick=()=> howToPlayModal();
+  if ($("btnCraftsWalkthrough")) $("btnCraftsWalkthrough").onclick=()=> craftsWalkthroughModal();
+  ["btnBucket4Checking","btnBucket4Savings","btnBucket4HYSA","btnBucket4CD","btnBucket4CD2"].forEach(id=>{
+    if($(id)) $(id).onclick=()=> showBucketInfo(4);
+  });
+  if($("btnCreditInfo")) $("btnCreditInfo").onclick=()=> showBucketInfo(5);
 }
 
 /* Render all */
@@ -2134,13 +3162,25 @@ function renderAll(){
   renderJob();
   renderLedger();
   renderProgress();
+  renderCDStatus();
+  renderSheet();
   applyLockRules();
+  if(!state.mission.active){
+    if(state.plan.lockedForYear && !state.jobLocked){
+      guideWantsStep();
+    } else {
+      guidePreStart();
+    }
+  }
 }
 
 /* INIT */
 populateContracts();
+applyBudgetModel(state.plan.model || "rule702010");
 wire();
 renderAll();
+guidePreStart();
+setTimeout(()=>howToPlayModal(), 250);
 </script>
 </body>
 </html>
