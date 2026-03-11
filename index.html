@@ -1102,6 +1102,14 @@ function trackCoverageForAction(action){
   (map[action]||[]).forEach(addCoverage);
 }
 
+/* Scroll to a button by id after the browser has painted */
+function scrollToBtn(id){
+  setTimeout(function(){
+    var el = document.getElementById(id);
+    if(el) el.scrollIntoView({ behavior:"smooth", block:"center" });
+  }, 0);
+}
+
 /* Required action glow + lock */
 function clearGlow(){ document.querySelectorAll(".glow").forEach(el=>el.classList.remove("glow")); }
 function requiredControlForAction(action){
@@ -1300,6 +1308,7 @@ function guidePreStart(){
     if($("btnSuggestedPlan")) $("btnSuggestedPlan").classList.add("glow");
     if($("btnApplyPlan")) $("btnApplyPlan").classList.add("glow");
     setLog("Step 1: choose and lock your year plan.");
+    scrollToBtn("btnSuggestedPlan");
   } else if(!state.jobLocked && !state.mission.active){
     openTab("plan");
     const planTab = document.querySelector('.tab[data-tab="plan"]');
@@ -1307,6 +1316,7 @@ function guidePreStart(){
     const jobField = $("jobName") ? $("jobName").closest(".field") : null;
     if(jobField) jobField.classList.add("glow");
     setLog("Step 2: choose a student job. Then build wants and start the year mission.");
+    scrollToBtn("jobNext");
   } else {
     openTab("plan");
   }
@@ -1321,6 +1331,7 @@ function guideWantsStep(){
   const wantsField = $("wantsPick") ? $("wantsPick").closest('.field') : null;
   if(wantsField) wantsField.classList.add('glow');
   updateWantsUI();
+  scrollToBtn("btnAddWant");
 }
 
 function showBucketInfo(bucketNum){
@@ -1914,7 +1925,8 @@ function runCurrentMissionStep(){
     onPick:(id)=>{
       if(id==="ok" && nextAction){
         const req = requiredControlForAction(nextAction);
-        if(req?.tab) openTab(req.tab);   // auto-jump
+        if(req?.tab) openTab(req.tab);
+        if(req?.el) scrollToBtn(req.el);
       }
     }
   });
@@ -1948,6 +1960,9 @@ function notifyAction(action){
   }else{
     m.waitingAction=remaining[0];
     applyLockRules();
+    const nr = requiredControlForAction(remaining[0]);
+    if(nr?.tab) openTab(nr.tab);
+    if(nr?.el) scrollToBtn(nr.el);
   }
 }
 
@@ -2001,7 +2016,9 @@ function updateWantsUI(){
     addBtn.classList.toggle('glow', pending >= target && !state.plan.wantsCommitted && !state.mission.active && state.plan.lockedForYear);
   }
   if(startBtn){
-    startBtn.classList.toggle('glow', !state.mission.active && state.plan.lockedForYear && state.plan.wantsCommitted && state.plan.wants >= target);
+    const startReady = !state.mission.active && state.plan.lockedForYear && state.plan.wantsCommitted && state.plan.wants >= target;
+    startBtn.classList.toggle('glow', startReady);
+    if(startReady) scrollToBtn("btnStartMission");
   }
 }
 
