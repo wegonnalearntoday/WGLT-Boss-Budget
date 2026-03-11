@@ -412,7 +412,7 @@ main::before{
 
         <div class="row">
           <span class="pill">Cash: <span class="money" id="cash">$200</span></span>
-          <span class="pill">Month: <span id="day">1</span>/12</span>
+          <span class="pill">Week <span id="weekNum">1</span>/48 • <span id="monthName">June</span></span>
           <span class="pill">Credit: <span class="credit" id="credit">650</span></span>
           <span class="pill">Savings Goal: <span id="goalBadge">$0</span></span>
         </div>
@@ -439,7 +439,7 @@ main::before{
         <h3>Mission Control</h3>
         <div class="body">
           <div class="muted">
-            Start the year mission and complete all 12 months. Required actions will glow so players know what to do next.
+            Start the year mission and complete all 48 weeks (June → May). Required actions glow. Weekly choice cards fire automatically — your decisions have real consequences later!
           </div>
 
           <div style="height:10px"></div>
@@ -463,6 +463,7 @@ main::before{
             <button class="btn success" id="btnStartMission">Start Year Mission</button>
             <button class="btn secondary" id="btnPauseMission">Pause</button>
             <button class="btn secondary" id="btnResetMission">Reset</button>
+            <button class="btn warn" id="btnLockJob">Lock Job ✓</button>
           </div>
 
           <div class="log" id="log">Ready. Choose and lock a year plan first.</div>
@@ -602,7 +603,7 @@ main::before{
               <button class="btn warn" id="btnSuggestedPlan">Choose Year Plan</button>
               <span class="pill">Budget Model: <span id="budgetModelLabel">70-20-10 Rule</span></span>
               <button class="btn success" id="btnApplyPlan">Lock Plan for Year</button>
-              <button class="btn secondary" id="btnNextWeek">Next Month ▶</button>
+              <button class="btn secondary" id="btnNextWeek">Next Week ▶</button>
               <button class="btn secondary" id="btnSavingsChallenge">Savings Challenge</button>
               <span class="pill">Goal: <span id="goalStatusInline">Not set</span></span>
               <span class="pill">Plan Lock: <span id="planLockLabel">Unlocked</span></span>
@@ -824,6 +825,1535 @@ Insurance: Not chosen</div>
   </div>
 
 <script>
+
+/* ============================================================
+   48-WEEK CHOICE ENGINE
+   June (week 1) → May (week 48)
+   Each week: 1 guaranteed scenario + ~37% chance of bonus
+   Delayed consequences queue fires on nextWeek()
+   ============================================================ */
+
+/* ── Calendar helpers ────────────────────────────────────── */
+const WEEK_CALENDAR = [
+  // week → { month (1-12 internal), monthName, season }
+  null, // index 0 unused
+  {m:1,name:"June",    season:"summer"},  // w1
+  {m:1,name:"June",    season:"summer"},  // w2
+  {m:1,name:"June",    season:"summer"},  // w3
+  {m:1,name:"June",    season:"summer"},  // w4
+  {m:2,name:"July",    season:"summer"},  // w5
+  {m:2,name:"July",    season:"summer"},  // w6
+  {m:2,name:"July",    season:"summer"},  // w7
+  {m:2,name:"July",    season:"summer"},  // w8
+  {m:3,name:"August",  season:"summer"},  // w9
+  {m:3,name:"August",  season:"summer"},  // w10
+  {m:3,name:"August",  season:"summer"},  // w11
+  {m:3,name:"August",  season:"summer"},  // w12
+  {m:4,name:"September",season:"school"}, // w13
+  {m:4,name:"September",season:"school"}, // w14
+  {m:4,name:"September",season:"school"}, // w15
+  {m:4,name:"September",season:"school"}, // w16
+  {m:5,name:"October", season:"school"},  // w17
+  {m:5,name:"October", season:"school"},  // w18
+  {m:5,name:"October", season:"school"},  // w19
+  {m:5,name:"October", season:"school"},  // w20
+  {m:6,name:"November",season:"school"},  // w21
+  {m:6,name:"November",season:"school"},  // w22
+  {m:6,name:"November",season:"school"},  // w23
+  {m:6,name:"November",season:"school"},  // w24
+  {m:7,name:"December",season:"holiday"}, // w25
+  {m:7,name:"December",season:"holiday"}, // w26
+  {m:7,name:"December",season:"holiday"}, // w27
+  {m:7,name:"December",season:"holiday"}, // w28
+  {m:8,name:"January", season:"school"},  // w29
+  {m:8,name:"January", season:"school"},  // w30
+  {m:8,name:"January", season:"school"},  // w31
+  {m:8,name:"January", season:"school"},  // w32
+  {m:9,name:"February",season:"school"},  // w33
+  {m:9,name:"February",season:"school"},  // w34
+  {m:9,name:"February",season:"school"},  // w35
+  {m:9,name:"February",season:"school"},  // w36
+  {m:10,name:"March",  season:"school"},  // w37
+  {m:10,name:"March",  season:"school"},  // w38
+  {m:10,name:"March",  season:"school"},  // w39
+  {m:10,name:"March",  season:"school"},  // w40
+  {m:11,name:"April",  season:"spring"},  // w41
+  {m:11,name:"April",  season:"spring"},  // w42
+  {m:11,name:"April",  season:"spring"},  // w43
+  {m:11,name:"April",  season:"spring"},  // w44
+  {m:12,name:"May",    season:"spring"},  // w45
+  {m:12,name:"May",    season:"spring"},  // w46
+  {m:12,name:"May",    season:"spring"},  // w47
+  {m:12,name:"May",    season:"spring"},  // w48
+];
+
+function weekToMonth(w){ return (WEEK_CALENDAR[w]||WEEK_CALENDAR[48]).m; }
+function weekToMonthName(w){ return (WEEK_CALENDAR[w]||WEEK_CALENDAR[48]).name; }
+
+/* ── Scenario consequence helpers ───────────────────────── */
+/* Each consequence: { triggerWeek, id, label, apply(state) } */
+/* apply() returns a summary string for the modal/log       */
+
+function queueConsequence(triggerWeek, id, label, applyFn){
+  state.weekEngine.pending.push({ triggerWeek, id, label, apply: applyFn });
+}
+
+function fireDueConsequences(currentWeek){
+  const due = state.weekEngine.pending.filter(c => c.triggerWeek === currentWeek);
+  state.weekEngine.pending = state.weekEngine.pending.filter(c => c.triggerWeek !== currentWeek);
+  if(!due.length) return;
+
+  const major = due.filter(c => c.major);
+  const minor = due.filter(c => !c.major);
+
+  // Minor consequences → ledger log only
+  minor.forEach(c => {
+    const msg = c.apply(state);
+    addLedgerLine(`↩ ${c.label}: ${msg}`);
+    renderHeader();
+  });
+
+  // Major consequences → modal one at a time
+  if(major.length){
+    let idx = 0;
+    function showNext(){
+      if(idx >= major.length){ renderAll(); return; }
+      const c = major[idx++];
+      const msg = c.apply(state);
+      renderHeader();
+      openModal({
+        title:`⚡ Consequence: ${c.label}`,
+        meta:`Week ${currentWeek} • Result of an earlier choice`,
+        body: msg,
+        buttons:[{id:"ok",label:"Got it",kind:"primary"}],
+        onPick: showNext
+      });
+    }
+    showNext();
+  } else {
+    renderAll();
+  }
+}
+
+/* ── Scenario choice modal builder ─────────────────────── */
+function openScenarioModal(scenario, onDone){
+  const job = state.jobs[state.jobIndex];
+  const title = scenario.title(job);
+  const body  = scenario.body(job);
+  const opts  = scenario.options(job, state);
+
+  // Build choice-grid HTML inside mBody
+  $("mTitle").textContent = `📅 Week ${state.weekEngine.week} • ${weekToMonthName(state.weekEngine.week)}`;
+  $("mMeta").textContent  = title;
+  $("mBody").innerHTML    = `<div style="font-weight:900;margin-bottom:12px">${body}</div><div class="choice-grid" id="scenChoiceGrid"></div>`;
+
+  const grid = document.getElementById("scenChoiceGrid");
+  opts.forEach((opt, i) => {
+    const btn = document.createElement("button");
+    btn.className = "choice-btn";
+    btn.innerHTML = `${opt.label}<small>${opt.hint || ""}</small>`;
+    btn.onclick = () => {
+      beep("click");
+      closeModal();
+      // Apply immediate effect
+      const summary = opt.apply(state, job);
+      if(summary) addLedgerLine(`✏ ${title}: ${summary}`);
+      // Queue delayed consequences
+      if(opt.consequences){
+        opt.consequences.forEach(c => {
+          const delayedC = Object.assign({}, c);
+          state.weekEngine.pending.push(delayedC);
+        });
+      }
+      // Store choice flag for conditional bonus scenarios
+      if(scenario.id) state.weekEngine.choices[scenario.id] = i;
+      renderHeader();
+      if(onDone) onDone();
+    };
+    grid.appendChild(btn);
+  });
+
+  const foot = $("mFoot");
+  foot.innerHTML = "";
+  // No close button — player must choose
+
+  $("overlay").classList.add("show");
+  $("overlay").setAttribute("aria-hidden","false");
+}
+
+/* ── End-of-week summary ─────────────────────────────────── */
+function showWeekSummary(week, onDone){
+  const echoes = state.weekEngine.pending.filter(c => c.triggerWeek <= week + 6 && c.triggerWeek > week);
+  const lines = [];
+  if(echoes.length){
+    lines.push("⚠️ Choices you made are still in play:");
+    echoes.forEach(c => lines.push(`  • ${c.label} (arrives Week ${c.triggerWeek})`));
+  }
+  const cal = WEEK_CALENDAR[week] || WEEK_CALENDAR[48];
+  const nextCal = WEEK_CALENDAR[Math.min(week+1,48)] || WEEK_CALENDAR[48];
+  const monthChange = nextCal.m !== cal.m;
+
+  if(!lines.length && !monthChange){
+    if(onDone) onDone();
+    return;
+  }
+
+  let body = "";
+  if(monthChange) body += `📅 Entering ${nextCal.name}!\n\n`;
+  if(lines.length) body += lines.join("\n");
+
+  openModal({
+    title: `Week ${week} Complete`,
+    meta: `${cal.name} → ${nextCal.name || cal.name}`,
+    body: body.trim() || "Another week done. Keep building!",
+    buttons:[{id:"ok",label:"Next Week ▶",kind:"primary"}],
+    onPick: onDone
+  });
+}
+
+/* ── 48-WEEK SCENARIO DECK ──────────────────────────────── */
+/* Format:
+   id          – unique key (used for conditional bonus triggers)
+   week        – which week this fires (1-48)
+   bonus       – true = only fires if trigger condition met or ~37% random
+   triggerIf   – optional fn(choices) => bool for conditional bonus
+   category    – flavor tag
+   title(job)  – fn returning string
+   body(job)   – fn returning string
+   options(job,state) – fn returning array of {label,hint,apply(state,job),consequences:[]}
+   Each consequence: { triggerWeek, id, label, major, apply(state) }
+*/
+
+const WEEKLY_SCENARIOS = [
+
+/* ══ WEEK 1 – June, first week of summer ══ */
+{
+  id:"w1_main", week:1, bonus:false, category:"daily",
+  title: j => `First Week of Summer — ${j.name}`,
+  body:  j => `It's June and you just landed your ${j.name} job. Your first paycheck is coming Friday. A friend wants you to go out tonight and spend $15. Do you go?`,
+  options: (j,s) => [
+    { label:"Go out — YOLO it's summer!",  hint:"-$15 from cash • fun energy",
+      apply: (st) => { st.cash = Math.max(0, st.cash - 15); st.ledger.weekExpenses += 15; addLedgerLine("Week 1: Went out opening night -$15"); return "-$15 cash, great energy boost"; },
+      consequences:[{ triggerWeek:3, id:"c_w1_a", label:"Summer Energy Boost", major:false,
+        apply:(st) => { st.bank.checking += 5; addLedgerLine("↩ Good energy from week 1 — client tipped extra +$5"); return "+$5 tip from happy client"; } }]
+    },
+    { label:"Stay in — save the money",  hint:"Keep $15 • steady start",
+      apply: (st) => { addLedgerLine("Week 1: Stayed in, saved $15"); return "Saved $15 — solid first move"; },
+      consequences:[{ triggerWeek:4, id:"c_w1_b", label:"Discipline Dividend", major:false,
+        apply:(st) => { st.bank.savings += 8; addLedgerLine("↩ Week 1 discipline paid off — savings bonus +$8"); return "+$8 savings bonus"; } }]
+    },
+    { label:"Compromise — grab a $5 snack",  hint:"-$5 • balanced choice",
+      apply: (st) => { st.cash = Math.max(0, st.cash - 5); st.ledger.weekExpenses += 5; addLedgerLine("Week 1: $5 snack compromise"); return "-$5 cash, good balance"; }
+    }
+  ]
+},
+/* Week 1 bonus — no trigger, pure random 37% */
+{
+  id:"w1_bonus", week:1, bonus:true, category:"banking",
+  title: j => "Open a Bank Account?",
+  body:  j => "Your mom says you should open a student checking account before your first paycheck hits. It takes 20 minutes but saves you check-cashing fees. Do you do it now or wait?",
+  options: (j,s) => [
+    { label:"Do it now", hint:"+$5 fee avoided later",
+      apply: (st) => { st.credit = Math.min(850, st.credit + 3); addLedgerLine("Week 1 bonus: Opened bank account early — credit +3"); return "Credit +3, set for direct deposit"; },
+      consequences:[{ triggerWeek:5, id:"c_w1bank", label:"No Check-Cashing Fee", major:false,
+        apply:(st) => { st.cash += 5; addLedgerLine("↩ No check-cashing fee — saved $5"); return "+$5 saved on fees"; } }]
+    },
+    { label:"Wait until next week", hint:"No change now",
+      apply: (st) => { addLedgerLine("Week 1 bonus: Delayed bank account"); return "No change yet"; },
+      consequences:[{ triggerWeek:3, id:"c_w1bank_late", label:"Check Cashing Fee", major:false,
+        apply:(st) => { st.cash = Math.max(0,st.cash-5); addLedgerLine("↩ Had to pay $5 check-cashing fee"); return "-$5 check-cashing fee"; } }]
+    }
+  ]
+},
+
+/* ══ WEEK 2 ══ */
+{
+  id:"w2_main", week:2, bonus:false, category:"ledger",
+  title: j => `${j.name}: Supply Decision`,
+  body:  j => {
+    const map = { lawn:"Your mower ran low on gas before your Saturday clients.", pet:"You're running low on pet treats before weekend visits.", babysitting:"You promised craft activities but forgot supplies.", dogwalk:"Rain is forecast — you need a poncho for dog walks.", cars:"You're almost out of car soap right before a big Saturday.", tutor:"You need new flash cards for a student's exam this week.", chores:"Your cleaning spray is almost gone before a big house job.", errands:"Your bus pass only has one ride left for a busy week.", crafts:"You're low on craft materials before a weekend market." };
+    return (map[j.id] || map.lawn) + " Do you buy supplies now or improvise?";
+  },
+  options: (j,s) => [
+    { label:"Buy supplies now", hint:"-$8 to $12 • ready to work",
+      apply: (st,j) => { const cost = {lawn:12,pet:10,babysitting:10,dogwalk:6,cars:9,tutor:7,chores:5,errands:4,crafts:12}[j.id]||8; st.ledger.weekExpenses += cost; st.cash = Math.max(0,st.cash-cost); addLedgerLine(`Week 2: Bought supplies for ${j.name} -$${cost}`); return `-$${cost}, fully stocked`; },
+      consequences:[{ triggerWeek:6, id:"c_w2_supplies", label:"Well-Stocked Worker", major:false,
+        apply:(st) => { st.bank.checking += 10; addLedgerLine("↩ Stocked supplies paid off — client booked again +$10"); return "+$10 repeat client booking"; } }]
+    },
+    { label:"Improvise this week", hint:"No cost now, risk later",
+      apply: (st) => { addLedgerLine("Week 2: Improvised without supplies"); return "No cost now"; },
+      consequences:[{ triggerWeek:4, id:"c_w2_noBuy", label:"Supply Shortage", major:true,
+        apply:(st) => { const cost=15; st.bank.checking = Math.max(0,st.bank.checking-cost); addLedgerLine(`↩ Week 2 improvise backfired — rush supply cost -$${cost}`); return `You ran out of supplies mid-job. Rush cost -$${cost} from checking.`; } }]
+    }
+  ]
+},
+
+/* ══ WEEK 3 ══ */
+{
+  id:"w3_main", week:3, bonus:false, category:"daily",
+  title: j => "Forgot Your Lunch",
+  body:  j => "You forgot lunch today. You have three options. What do you do?",
+  options: (j,s) => [
+    { label:"Buy school lunch — $3.50", hint:"-$3.50 cash • full energy",
+      apply: (st) => { st.cash = Math.max(0, st.cash-4); addLedgerLine("Week 3: Bought school lunch -$4"); return "-$4, full energy"; },
+      consequences:[{ triggerWeek:4, id:"c_lunch_buy", label:"Good Energy at Work", major:false,
+        apply:(st) => { st.bank.checking += 5; addLedgerLine("↩ Ate well → strong work week → tip +$5"); return "+$5 tip from energy boost"; } }]
+    },
+    { label:"Skip lunch — save the $", hint:"No cost • tired later",
+      apply: (st) => { addLedgerLine("Week 3: Skipped lunch"); return "Saved money but energy dipped"; },
+      consequences:[{ triggerWeek:4, id:"c_lunch_skip", label:"Low Energy Tax", major:false,
+        apply:(st) => { st.ledger.weekExpenses += 5; st.bank.checking = Math.max(0,st.bank.checking-5); addLedgerLine("↩ Skipped lunch → tired → made mistake at work -$5"); return "Low energy cost -$5 from checking"; } }]
+    },
+    { label:"Grab a vending snack — $1.50", hint:"-$1.50 • partial energy",
+      apply: (st) => { st.cash = Math.max(0, st.cash-2); addLedgerLine("Week 3: Vending snack -$2"); return "-$2 cash, okay energy"; }
+    }
+  ]
+},
+{
+  id:"w3_bonus", week:3, bonus:true, category:"contract",
+  title: j => "Phone Plan Offer",
+  body:  j => "A carrier is offering a student phone plan — $25/month, auto-renews. Your current plan costs $30. It looks like a deal. Read the fine print: $40 cancellation fee.",
+  options: (j,s) => [
+    { label:"Switch — save $5/mo", hint:"-$25/mo • $40 cancel fee",
+      apply: (st) => { st.contractActive = true; st.contractId = "phone"; st.bank.checking = Math.max(0,st.bank.checking-25); addLedgerLine("Week 3 bonus: Signed new phone plan -$25"); addCoverage(10); addCoverage(13); return "-$25/mo contract accepted"; },
+      consequences:[{ triggerWeek:19, id:"c_phone_renew", label:"Phone Auto-Renewal", major:true,
+        apply:(st) => { st.bank.checking = Math.max(0,st.bank.checking-25); addLedgerLine("↩ Phone plan auto-renewed -$25 (you almost forgot!)"); return "Your phone plan auto-renewed for another month. -$25 from checking. You forgot to cancel it before October!" } }]
+    },
+    { label:"Keep current plan", hint:"No change",
+      apply: (st) => { addLedgerLine("Week 3 bonus: Kept existing phone plan"); addCoverage(10); return "No contract change"; }
+    },
+    { label:"Research more next week", hint:"No change now",
+      apply: (st) => { addLedgerLine("Week 3 bonus: Delayed phone decision"); return "Delayed decision"; }
+    }
+  ]
+},
+
+/* ══ WEEK 4 ══ */
+{
+  id:"w4_main", week:4, bonus:false, category:"banking",
+  title: j => "First Paycheck Decision",
+  body:  j => `Your first ${j.name} paycheck just came in. It's the end of June. How do you split it?`,
+  options: (j,s) => [
+    { label:"Put it all in savings first", hint:"Max growth • less spending cash",
+      apply: (st) => { const amt = Math.round(st.plan.income * 0.6); st.bank.savings += amt; st.bank.checking = Math.max(0,st.bank.checking-amt); addLedgerLine(`Week 4: Moved $${amt} to savings first`); addCoverage(4); return `+$${amt} to savings`; },
+      consequences:[{ triggerWeek:8, id:"c_w4_save", label:"Savings Growth Milestone", major:false,
+        apply:(st) => { st.bank.savings += 10; addLedgerLine("↩ Month of savings discipline — bonus +$10"); return "+$10 savings growth bonus"; } }]
+    },
+    { label:"Split 50/50 checking & savings", hint:"Balanced approach",
+      apply: (st) => { const amt = Math.round(st.plan.income * 0.25); st.bank.savings += amt; addLedgerLine(`Week 4: 50/50 split, +$${amt} savings`); addCoverage(4); return `Balanced split, +$${amt} savings`; }
+    },
+    { label:"Keep it all in checking", hint:"Easy access • zero growth",
+      apply: (st) => { addLedgerLine("Week 4: Kept all in checking"); return "All in checking, no growth"; },
+      consequences:[{ triggerWeek:10, id:"c_w4_checking", label:"Missed Savings Growth", major:false,
+        apply:(st) => { addLedgerLine("↩ Kept funds in checking — missed $12 in savings growth"); return "You missed out on ~$12 in savings interest by keeping everything in checking."; } }]
+    }
+  ]
+},
+
+/* ══ WEEK 5 – July begins ══ */
+{
+  id:"w5_main", week:5, bonus:false, category:"daily",
+  title: j => `July Heat — ${j.name} Challenge`,
+  body:  j => {
+    const map = { lawn:"Heat wave hit. Mowing in 95° heat is brutal. You can buy extra water/electrolytes ($6) or push through.", pet:"It's too hot to walk dogs in the afternoon. You could offer early-morning slots (lose $8 but protect the animals) or keep the schedule.", babysitting:"Family wants outdoor activities in this heat. You could pay for pool admission ($10) or suggest indoor crafts.", dogwalk:"Heat advisory today. Cancel afternoon walks and refund $12, or walk anyway and risk a sick dog.", cars:"Demand is high in summer heat — cars get dirty fast. You could advertise a special ($5 off, gain 2 clients) or keep standard pricing.", tutor:"Student wants to skip this week because of summer. Offer a discount ($7 less) to keep them, or let them go.", chores:"Heat makes cleaning exhausting. You could do half the job and charge half ($15 less), or power through.", errands:"Bus is packed and hot. Pay for a rideshare ($8) or deal with the crowded bus.", crafts:"Heat slows market foot traffic. Set up a fan for $12 or hope for a breeze." };
+    return (map[j.id]||map.lawn);
+  },
+  options: (j,s) => [
+    { label:"Spend the extra $ for comfort/safety", hint:"-$6 to $12 • better outcome",
+      apply: (st,j) => { const cost={lawn:6,pet:8,babysitting:10,dogwalk:12,cars:0,tutor:7,chores:15,errands:8,crafts:12}[j.id]||8; st.cash=Math.max(0,st.cash-cost); st.ledger.weekExpenses+=cost; addLedgerLine(`Week 5: Spent $${cost} for summer comfort`); return `-$${cost}, smart safety/comfort choice`; },
+      consequences:[{ triggerWeek:8, id:"c_w5_spend", label:"Client Kept / Animal Safe", major:false,
+        apply:(st)=>{ st.bank.checking+=10; addLedgerLine("↩ Good July decision — retained client/animal safe +$10"); return "+$10 client retention bonus"; } }]
+    },
+    { label:"Push through — save the cash", hint:"No cost • potential problem",
+      apply: (st) => { addLedgerLine("Week 5: Pushed through summer heat"); return "No cost, took the risk"; },
+      consequences:[{ triggerWeek:7, id:"c_w5_push", label:"Heat Consequence", major:true,
+        apply:(st)=>{ st.bank.checking=Math.max(0,st.bank.checking-18); addLedgerLine("↩ Week 5 heat risk backfired — lost client/vet bill -$18"); return "Pushing through the heat cost you: a client complaint or an animal got sick. -$18 from checking."; } }]
+    }
+  ]
+},
+{
+  id:"w5_bonus", week:5, bonus:true, category:"investing",
+  title: j => "Friend's Investment Tip",
+  body:  j => "Your older cousin says everyone's buying a hot stock. 'Put in $25 and double your money!' It's unverified. Do you invest?",
+  options: (j,s) => [
+    { label:"Invest $25 — sounds good!", hint:"-$25 now • 50/50 result",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-25); addLedgerLine("Week 5 bonus: Invested $25 in tip stock"); addCoverage(8); return "-$25 invested"; },
+      consequences:[{ triggerWeek:10, id:"c_stock_tip", label:"Stock Tip Result", major:true,
+        apply:(st)=>{ const win = Math.random()>0.5; if(win){ st.bank.checking+=40; addLedgerLine("↩ Stock tip paid off! +$40"); return "Your cousin's tip worked out! +$40 back to checking. Lucky — but it could have gone the other way."; } else { addLedgerLine("↩ Stock tip failed — lost the $25"); return "The stock tanked. You lost your $25 investment. Unverified tips are risky — always research first."; } } }]
+    },
+    { label:"Skip it — research first", hint:"No loss • smart move",
+      apply:(st)=>{ addLedgerLine("Week 5 bonus: Skipped unverified stock tip"); addCoverage(8); return "Smart — skipped the gamble"; }
+    }
+  ]
+},
+
+/* ══ WEEK 6 ══ */
+{
+  id:"w6_main", week:6, bonus:false, category:"billing",
+  title: j => "Mystery Charge on Statement",
+  body:  j => "You check your bank app and see a $22 charge you don't recognize from last month. What do you do?",
+  options: (j,s) => [
+    { label:"Dispute it immediately", hint:"Credit +5 • smart consumer",
+      apply:(st)=>{ st.credit=Math.min(850,st.credit+5); addLedgerLine("Week 6: Disputed mystery charge — credit +5"); addCoverage(11); addCoverage(13); return "Dispute filed. Credit +5"; },
+      consequences:[{ triggerWeek:9, id:"c_w6_dispute", label:"Dispute Resolution", major:true,
+        apply:(st)=>{ st.bank.checking+=22; addLedgerLine("↩ Dispute resolved — $22 refunded"); return "The bank investigated and refunded $22 to your checking account. Always dispute unauthorized charges!"; } }]
+    },
+    { label:"Ignore it — probably fine", hint:"Credit -8 • risky",
+      apply:(st)=>{ st.credit=Math.max(300,st.credit-8); addLedgerLine("Week 6: Ignored mystery charge — credit -8"); return "Credit -8 — bad habit"; },
+      consequences:[{ triggerWeek:9, id:"c_w6_ignore", label:"Charge Compounds", major:true,
+        apply:(st)=>{ st.bank.checking=Math.max(0,st.bank.checking-22); addLedgerLine("↩ Mystery charge repeated — -$22 again"); return "The charge hit again. Ignoring it cost you $22 more. Always check your statements and dispute anything suspicious."; } }]
+    },
+    { label:"Call bank to understand it", hint:"No immediate effect",
+      apply:(st)=>{ addLedgerLine("Week 6: Called bank about charge"); addCoverage(11); return "Called bank — smart first step"; },
+      consequences:[{ triggerWeek:8, id:"c_w6_call", label:"Bank Call Outcome", major:false,
+        apply:(st)=>{ st.bank.checking+=22; st.credit=Math.min(850,st.credit+2); addLedgerLine("↩ Bank call resolved charge +$22, credit +2"); return "+$22 refund, credit +2 for proactive action"; } }]
+    }
+  ]
+},
+{
+  id:"w6_bonus", week:6, bonus:true, triggerIf: choices => choices["w3_main"] === 0, // bought lunch
+  category:"daily",
+  title: j => "Lunch Habit Check",
+  body:  j => "You've been buying lunch every day. That's $3.50 × 5 days = $17.50 a week. A friend suggests meal prepping on Sunday to save $12/week. Sound worth it?",
+  options: (j,s) => [
+    { label:"Start meal prepping — $5 groceries", hint:"-$5 now, save $12/wk",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-5); addLedgerLine("Week 6 bonus: Started meal prep -$5"); return "Started meal prepping -$5"; },
+      consequences:[{ triggerWeek:10, id:"c_mealprep", label:"Meal Prep Savings", major:false,
+        apply:(st)=>{ st.bank.savings+=25; addLedgerLine("↩ 4 weeks of meal prep saved $25"); return "+$25 meal prep savings"; } }]
+    },
+    { label:"Keep buying lunch", hint:"No change",
+      apply:(st)=>{ addLedgerLine("Week 6 bonus: Kept buying lunch"); return "Kept buying lunch"; }
+    }
+  ]
+},
+
+/* ══ WEEK 7 ══ */
+{
+  id:"w7_main", week:7, bonus:false, category:"contract",
+  title: j => "Gym Membership Offer",
+  body:  j => "A local gym is offering a student special — $20/month, auto-renews, $40 cancellation fee. Your friend is joining. Do you sign up?",
+  options: (j,s) => [
+    { label:"Join the gym", hint:"-$20/mo • $40 cancel fee",
+      apply:(st)=>{ st.bank.checking=Math.max(0,st.bank.checking-20); addLedgerLine("Week 7: Joined gym -$20"); addCoverage(10); addCoverage(13); return "-$20/mo gym contract"; },
+      consequences:[
+        { triggerWeek:15, id:"c_gym_renew", label:"Gym Auto-Renewal", major:true,
+          apply:(st)=>{ st.bank.checking=Math.max(0,st.bank.checking-20); addLedgerLine("↩ Gym auto-renewed -$20 (school got busy)"); return "School started and you forgot about the gym. Auto-renewal charged -$20. Cancel fee would be $40. Pay or cancel?"; } },
+        { triggerWeek:23, id:"c_gym_renew2", label:"Gym Renews Again", major:false,
+          apply:(st)=>{ if(st.contractActive && st.contractId==="gym"){ st.bank.checking=Math.max(0,st.bank.checking-20); addLedgerLine("↩ Gym auto-renewed again -$20"); return "-$20 gym auto-renewal"; } return "No gym charge (already cancelled)"; } }
+      ]
+    },
+    { label:"Skip — save the $20/mo", hint:"No contract risk",
+      apply:(st)=>{ addLedgerLine("Week 7: Skipped gym membership"); addCoverage(10); return "No gym contract"; }
+    },
+    { label:"Month-to-month only ($25)", hint:"-$25 now • no lock-in",
+      apply:(st)=>{ st.bank.checking=Math.max(0,st.bank.checking-25); addLedgerLine("Week 7: Month-to-month gym -$25"); return "-$25 no commitment"; }
+    }
+  ]
+},
+
+/* ══ WEEK 8 ══ */
+{
+  id:"w8_main", week:8, bonus:false, category:"ledger",
+  title: j => `End of July — ${j.name} Business Review`,
+  body:  j => "You've been working 2 months now. A client/customer wants to pay you less than your usual rate, claiming other people charge less. Do you lower your price?",
+  options: (j,s) => [
+    { label:"Hold your rate — you're worth it", hint:"No income loss",
+      apply:(st)=>{ addLedgerLine("Week 8: Held rate — professional"); return "Kept rate, stayed professional"; },
+      consequences:[{ triggerWeek:12, id:"c_w8_rate_hold", label:"Reputation Reward", major:false,
+        apply:(st)=>{ st.bank.checking+=15; addLedgerLine("↩ Held rate — new referral client +$15"); return "Your client respected your rate and referred a friend. +$15 bonus"; } }]
+    },
+    { label:"Lower by $5 to keep them", hint:"-$5/session but client stays",
+      apply:(st)=>{ st.ledger.weekExpenses+=5; addLedgerLine("Week 8: Lowered rate by $5"); return "-$5 per session, kept client"; },
+      consequences:[{ triggerWeek:14, id:"c_w8_rate_low", label:"Rate Creep", major:false,
+        apply:(st)=>{ st.bank.checking=Math.max(0,st.bank.checking-10); addLedgerLine("↩ Low rate set a precedent — 2 more clients asked for same -$10"); return "Two more clients asked for your discounted rate. -$10 from earnings."; } }]
+    }
+  ]
+},
+{
+  id:"w8_bonus", week:8, bonus:true, category:"banking",
+  title: j => "High-Yield Savings Offer",
+  body:  j => "Your bank is advertising a high-yield savings account at 4% APR vs your regular 0.5%. You need $25 minimum to open it. Worth switching?",
+  options: (j,s) => [
+    { label:"Switch to high-yield", hint:"Better growth long term",
+      apply:(st)=>{ if(st.bank.savings >= 25){ st.bank.savingsType="hysa"; st.bank.hysaPrincipal=Math.min(st.bank.savings, 100); addLedgerLine("Week 8 bonus: Switched to high-yield savings"); addCoverage(4); return "Switched to HYSA — 4% growth"; } else { addLedgerLine("Week 8 bonus: Not enough in savings yet"); return "Need $25+ in savings first"; } }
+    },
+    { label:"Keep regular savings", hint:"No change",
+      apply:(st)=>{ addLedgerLine("Week 8 bonus: Kept regular savings"); return "Stayed with regular savings"; }
+    }
+  ]
+},
+
+/* ══ WEEK 9 – August begins ══ */
+{
+  id:"w9_main", week:9, bonus:false, category:"daily",
+  title: j => "Back-to-School Shopping Pressure",
+  body:  j => "August means back-to-school sales. Your friends are all buying new stuff. You need some supplies but not $80 worth. What's your move?",
+  options: (j,s) => [
+    { label:"Buy only what you need — $20", hint:"-$20 • smart needs spending",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-20); addLedgerLine("Week 9: Bought needed school supplies -$20"); return "-$20 needs only"; }
+    },
+    { label:"Buy extra stuff — go with the crowd $60", hint:"-$60 • wants",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-60); st.plan.wants+=10; addLedgerLine("Week 9: Back-to-school splurge -$60"); return "-$60 wants spending"; },
+      consequences:[{ triggerWeek:13, id:"c_bts_splurge", label:"September Budget Squeeze", major:true,
+        apply:(st)=>{ st.bank.checking=Math.max(0,st.bank.checking-20); addLedgerLine("↩ Back-to-school splurge → tight Sept budget -$20"); return "The August splurge caught up with you. September budget is tight — had to skip a savings deposit -$20."; } }]
+    },
+    { label:"Buy secondhand / borrow — $8", hint:"-$8 • great savings habit",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-8); st.bank.savings+=10; addLedgerLine("Week 9: Secondhand supplies -$8, saved $10"); return "-$8 smart choice, +$10 savings"; }
+    }
+  ]
+},
+
+/* ══ WEEK 10 ══ */
+{
+  id:"w10_main", week:10, bonus:false, category:"inheritance",
+  title: j => "Surprise: Grandparent Gift",
+  body:  j => "Your grandparent sends $150 for your birthday. It's unexpected. You have three real choices for this money.",
+  options: (j,s) => [
+    { label:"Save all of it", hint:"+$150 to savings",
+      apply:(st)=>{ st.bank.savings+=150; addLedgerLine("Week 10: Grandparent gift — saved $150"); addCoverage(5); addCoverage(3); return "+$150 to savings"; },
+      consequences:[{ triggerWeek:16, id:"c_gift_save", label:"Savings Milestone", major:false,
+        apply:(st)=>{ st.bank.savings+=12; addLedgerLine("↩ Consistent saving from gift — growth bonus +$12"); return "+$12 savings milestone reward"; } }]
+    },
+    { label:"Invest $100, spend $50", hint:"Balanced approach",
+      apply:(st)=>{ st.bank.hysaPrincipal+=100; st.bank.savingsType="hysa"; st.cash=Math.max(0,st.cash+50-50); addLedgerLine("Week 10: Gift — $100 to HYSA, $50 spent"); addCoverage(5); addCoverage(8); return "$100 invested in HYSA, $50 spent"; },
+      consequences:[{ triggerWeek:20, id:"c_gift_invest", label:"HYSA Growth Check", major:false,
+        apply:(st)=>{ const growth=Math.round(st.bank.hysaPrincipal*0.04); st.bank.hysaPrincipal+=growth; st.bank.hysaAccrued+=growth; addLedgerLine(`↩ Gift investment grew +$${growth}`); return `Your HYSA investment grew +$${growth} — smart choice to invest some of the gift.`; } }]
+    },
+    { label:"Spend it all — birthday treat!", hint:"+$150 wants, credit -3",
+      apply:(st)=>{ st.plan.wants+=20; st.credit=Math.max(300,st.credit-3); addLedgerLine("Week 10: Spent birthday gift -$150 wants"); addCoverage(5); return "-$150 spent on wants, credit -3"; },
+      consequences:[{ triggerWeek:14, id:"c_gift_spend", label:"Spent Gift Tax", major:true,
+        apply:(st)=>{ addLedgerLine("↩ Spent birthday gift — now short on school expenses"); return "You spent your birthday gift and now a school expense came up you weren't ready for. Try to keep some gifts in savings for unexpected costs."; } }]
+    }
+  ]
+},
+{
+  id:"w10_bonus", week:10, bonus:true, category:"ledger",
+  title: j => `${j.name}: Upgrade Your Equipment?`,
+  body:  j => {
+    const map={lawn:"A used commercial mower is for sale for $80. It'd let you take on bigger lawns.",pet:"A better pet carrier is $45 — clients would trust you more with their animals.",babysitting:"A first-aid/CPR mini-course is $35 — parents pay more for certified sitters.",dogwalk:"Retractable leashes ($20) would let you walk 2 dogs at once, doubling potential income.",cars:"A pressure washer rental program is $60/month — could triple your car wash income.",tutor:"Education software license is $25 — helps you tutor more subjects.",chores:"A quality vacuum is $55 — do jobs faster and charge more.",errands:"A bike lock + basket ($30) lets you do bike errands, more clients.",crafts:"An Etsy shop ($15 setup) opens online sales beyond local markets."};
+    return (map[j.id]||map.lawn) + " Invest or save the money?";
+  },
+  options: (j,s) => [
+    { label:"Invest in the upgrade", hint:"-$20 to $80 • income boost",
+      apply:(st,j)=>{ const cost={lawn:80,pet:45,babysitting:35,dogwalk:20,cars:60,tutor:25,chores:55,errands:30,crafts:15}[j.id]||40; st.cash=Math.max(0,st.cash-cost); st.ledger.weekExpenses+=cost; addLedgerLine(`Week 10 bonus: Job upgrade -$${cost}`); addCoverage(1); return `-$${cost} upgrade`; },
+      consequences:[{ triggerWeek:16, id:"c_upgrade", label:"Upgrade Pays Off", major:false,
+        apply:(st)=>{ st.bank.checking+=25; addLedgerLine("↩ Job upgrade paid off — new client +$25"); return "+$25 from upgrade — new client booked"; } }]
+    },
+    { label:"Save the money instead", hint:"No income boost",
+      apply:(st)=>{ addLedgerLine("Week 10 bonus: Saved instead of upgrading"); return "Kept savings intact"; }
+    }
+  ]
+},
+
+/* ══ WEEK 11 ══ */
+{
+  id:"w11_main", week:11, bonus:false, category:"daily",
+  title: j => "Friend Needs to Borrow Money",
+  body:  j => "Your friend asks to borrow $25 until next Friday. They've borrowed before and paid back once but were late. Do you lend it?",
+  options: (j,s) => [
+    { label:"Lend the $25", hint:"-$25 now • maybe back",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-25); addLedgerLine("Week 11: Lent $25 to friend"); return "-$25 loaned to friend"; },
+      consequences:[{ triggerWeek:13, id:"c_lend", label:"Friend Repayment", major:true,
+        apply:(st)=>{ const paysBack=Math.random()>0.4; if(paysBack){ st.cash+=25; addLedgerLine("↩ Friend paid back $25 on time"); return "Your friend paid back the $25! Not always the outcome — but this time it worked out."; } else { addLedgerLine("↩ Friend couldn't pay back $25"); return "Your friend couldn't pay you back yet. The $25 is still owed. Lending money to friends can get complicated."; } } }]
+    },
+    { label:"Say no — protect your budget", hint:"No loss",
+      apply:(st)=>{ addLedgerLine("Week 11: Said no to lending money"); return "Protected your budget"; }
+    },
+    { label:"Lend $10 only", hint:"-$10 compromise",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-10); addLedgerLine("Week 11: Compromised — lent $10"); return "-$10 compromise loan"; },
+      consequences:[{ triggerWeek:13, id:"c_lend_partial", label:"Partial Loan Return", major:false,
+        apply:(st)=>{ st.cash+=10; addLedgerLine("↩ Friend paid back the $10 partial loan"); return "+$10 paid back on time"; } }]
+    }
+  ]
+},
+
+/* ══ WEEK 12 ══ */
+{
+  id:"w12_main", week:12, bonus:false, category:"ledger",
+  title: j => "End of Summer — Client/Customer Appreciation",
+  body:  j => `Summer's wrapping up. A regular client for your ${j.name} business wants to give you a $30 tip or a recommendation letter for a school application. What do you choose?`,
+  options: (j,s) => [
+    { label:"Take the $30 cash", hint:"+$30 checking",
+      apply:(st)=>{ st.bank.checking+=30; addLedgerLine("Week 12: Summer tip +$30"); return "+$30 tip received"; }
+    },
+    { label:"Take the recommendation letter", hint:"+credit score bonus",
+      apply:(st)=>{ st.credit=Math.min(850,st.credit+8); addLedgerLine("Week 12: Recommendation letter — credit +8"); return "Recommendation letter — credit +8"; },
+      consequences:[{ triggerWeek:20, id:"c_recoletter", label:"Letter Pays Off", major:false,
+        apply:(st)=>{ st.credit=Math.min(850,st.credit+5); addLedgerLine("↩ Rec letter helped with school program — credit +5"); return "+5 credit from recommendation letter doors it opened"; } }]
+    }
+  ]
+},
+{
+  id:"w12_bonus", week:12, bonus:true, category:"savings",
+  title: j => "Summer Savings Review",
+  body:  j => "Before school starts, you have a chance to move your summer cash into a CD. 3-month CD pays 4% but locks the money until November. Good idea?",
+  options: (j,s) => [
+    { label:"Open a 3-month CD", hint:"Lock until Nov, earn 4%",
+      apply:(st)=>{ if(st.cash>=50||st.bank.savings>=50){ createCD("3m",50,true,"bonus"); addLedgerLine("Week 12 bonus: Opened 3-month summer CD"); addCoverage(4); addCoverage(9); return "3-month CD opened — money locked until Week 24"; } else { return "Not enough funds for a $50 CD minimum"; } }
+    },
+    { label:"Keep money accessible", hint:"No lock-in",
+      apply:(st)=>{ addLedgerLine("Week 12 bonus: Kept savings accessible"); return "Kept funds liquid"; }
+    }
+  ]
+},
+
+/* ══ WEEK 13 – September: School Starts ══ */
+{
+  id:"w13_main", week:13, bonus:false, category:"schedule",
+  title: j => "🏫 School Starts — How Many Hours?",
+  body:  j => `School just started. You can't work as many hours as summer. How do you adjust your ${j.name} schedule? This affects your income for the next few months.`,
+  options: (j,s) => [
+    { label:"Cut to 8 hrs/week — school first", hint:"-40% income • stable grades",
+      apply:(st)=>{ st.plan.income = Math.round(st.plan.income * 0.60); addLedgerLine("Week 13: Cut to 8 hrs/wk — income reduced 40%"); return "Income cut 40% — school priority"; },
+      consequences:[{ triggerWeek:25, id:"c_school_hrs_low", label:"Grade Benefit", major:false,
+        apply:(st)=>{ st.credit=Math.min(850,st.credit+6); addLedgerLine("↩ Good grades from school focus — credit +6"); return "+6 credit for academic responsibility"; } }]
+    },
+    { label:"Keep 15 hrs/week — hustle both", hint:"Full income • stress risk",
+      apply:(st)=>{ addLedgerLine("Week 13: Kept full hours through school start"); return "Full hours, full income"; },
+      consequences:[{ triggerWeek:18, id:"c_school_hrs_high", label:"Burnout Check", major:true,
+        apply:(st)=>{ st.bank.checking=Math.max(0,st.bank.checking-15); addLedgerLine("↩ Burnout from overwork — missed job, refunded -$15"); return "You took on too much. Missed a job and had to refund a client -$15. Balance school and work carefully."; } }]
+    },
+    { label:"10 hrs/week — balanced", hint:"20% income cut • manageable",
+      apply:(st)=>{ st.plan.income = Math.round(st.plan.income * 0.80); addLedgerLine("Week 13: Balanced 10 hrs/wk — income -20%"); return "Income -20%, balanced approach"; }
+    }
+  ]
+},
+
+/* ══ WEEK 14 ══ */
+{
+  id:"w14_main", week:14, bonus:false, category:"daily",
+  title: j => "School Activity Fee",
+  body:  j => "Your school wants $45 for a club fee. It's a good opportunity but it's not in your budget plan. What do you do?",
+  options: (j,s) => [
+    { label:"Pay the fee — it's worth it", hint:"-$45 checking",
+      apply:(st)=>{ st.bank.checking=Math.max(0,st.bank.checking-45); addLedgerLine("Week 14: Paid club fee -$45"); return "-$45 from checking"; },
+      consequences:[{ triggerWeek:24, id:"c_club_pay", label:"Club Opens Door", major:false,
+        apply:(st)=>{ st.credit=Math.min(850,st.credit+5); addLedgerLine("↩ Club membership helped — networking credit +5"); return "+5 credit from club networking opportunity"; } }]
+    },
+    { label:"Skip the club this semester", hint:"No cost",
+      apply:(st)=>{ addLedgerLine("Week 14: Skipped club fee"); return "Skipped club"; }
+    },
+    { label:"Ask about a payment plan", hint:"-$15 x3 months",
+      apply:(st)=>{ st.bank.checking=Math.max(0,st.bank.checking-15); addLedgerLine("Week 14: Club payment plan -$15 first"); return "-$15 now, 2 more payments"; },
+      consequences:[{ triggerWeek:18, id:"c_club_plan2", label:"Club Payment 2", major:false, apply:(st)=>{ st.bank.checking=Math.max(0,st.bank.checking-15); addLedgerLine("↩ Club payment plan #2 -$15"); return "-$15 club payment"; } },
+        { triggerWeek:22, id:"c_club_plan3", label:"Club Payment 3", major:false, apply:(st)=>{ st.bank.checking=Math.max(0,st.bank.checking-15); addLedgerLine("↩ Club payment plan #3 -$15"); return "-$15 final club payment"; } }]
+    }
+  ]
+},
+
+/* ══ WEEK 15 ══ */
+{
+  id:"w15_main", week:15, bonus:false, category:"ledger",
+  title: j => `${j.name}: Slow Week Decision`,
+  body:  j => `Work slowed down when school started. You earned $${Math.round(state.plan.income/4)} less than expected this week. Do you dip into savings to cover needs, or cut wants?`,
+  options: (j,s) => [
+    { label:"Cut wants this week", hint:"No savings touched",
+      apply:(st)=>{ st.plan.wants=Math.max(0,st.plan.wants-10); addLedgerLine("Week 15: Cut wants to manage slow week"); return "Cut wants $10 — smart discipline"; }
+    },
+    { label:"Dip into savings — just this once", hint:"-$20 savings",
+      apply:(st)=>{ const amt=20; st.bank.savings=Math.max(0,st.bank.savings-amt); st.bank.checking+=amt; addLedgerLine(`Week 15: Dipped into savings -$${amt}`); return `-$${amt} from savings`; },
+      consequences:[{ triggerWeek:20, id:"c_dip_savings", label:"Savings Dip Habit", major:false,
+        apply:(st)=>{ addLedgerLine("↩ Dipped into savings again — pattern forming"); return "You dipped into savings again during a slow week. Patterns form fast — try to cut wants instead next time."; } }]
+    },
+    { label:"Pick up an extra quick job", hint:"+$15 hustle income",
+      apply:(st)=>{ st.bank.checking+=15; addLedgerLine("Week 15: Extra quick job +$15"); return "+$15 hustle income"; }
+    }
+  ]
+},
+{
+  id:"w15_bonus", week:15, bonus:true, category:"contract",
+  title: j => "Streaming Subscription Renewal",
+  body:  j => "You got an email: your $12/month streaming service is about to auto-renew for 6 months ($72). You've barely used it. Cancel or keep?",
+  options: (j,s) => [
+    { label:"Cancel it now", hint:"Save $72 • miss some shows",
+      apply:(st)=>{ st.bank.checking+=12; addLedgerLine("Week 15 bonus: Cancelled streaming — saved $12 this month"); addCoverage(10); addCoverage(13); return "+$12 saved, subscription cancelled"; }
+    },
+    { label:"Keep it — I use it", hint:"-$12/mo continues",
+      apply:(st)=>{ st.bank.checking=Math.max(0,st.bank.checking-12); addLedgerLine("Week 15 bonus: Kept streaming subscription -$12"); addCoverage(10); return "-$12/mo subscription continues"; },
+      consequences:[{ triggerWeek:25, id:"c_stream_renew", label:"Streaming Renewal", major:false,
+        apply:(st)=>{ st.bank.checking=Math.max(0,st.bank.checking-12); addLedgerLine("↩ Streaming auto-renewed -$12"); return "-$12 streaming auto-renewal"; } }]
+    }
+  ]
+},
+
+/* ══ WEEK 16 ══ */
+{
+  id:"w16_main", week:16, bonus:false, category:"banking",
+  title: j => "Overdraft Warning",
+  body:  j => "Your checking account is at $8. A planned bill of $15 hits tomorrow. You'll overdraft unless you act now. What do you do?",
+  options: (j,s) => [
+    { label:"Transfer from savings immediately", hint:"-savings, +checking",
+      apply:(st)=>{ const amt=20; st.bank.savings=Math.max(0,st.bank.savings-amt); st.bank.checking+=amt; addLedgerLine("Week 16: Emergency transfer from savings to avoid overdraft"); addCoverage(4); return `Transferred $${amt} from savings — overdraft avoided`; }
+    },
+    { label:"Do nothing — accept overdraft", hint:"-$10 to $20 fee",
+      apply:(st)=>{ const ct=state.bank.checkingType?BANK_PRODUCTS.checking.find(x=>x.id===state.bank.checkingType):null; const fee=ct?ct.overdraftFee:15; st.bank.checking-=fee; st.credit=Math.max(300,st.credit-10); addLedgerLine(`Week 16: Overdraft fee -$${fee}, credit -10`); addCoverage(4); return `-$${fee} overdraft fee, credit -10`; }
+    },
+    { label:"Call bank — ask about fee waiver", hint:"Maybe free this time",
+      apply:(st)=>{ const waived=Math.random()>0.5; if(waived){ addLedgerLine("Week 16: Bank waived overdraft fee — proactive!"); st.credit=Math.min(850,st.credit+3); return "Fee waived! Credit +3 for being proactive"; } else { const ct=state.bank.checkingType?BANK_PRODUCTS.checking.find(x=>x.id===state.bank.checkingType):null; const fee=ct?ct.overdraftFee:15; st.bank.checking-=fee; addLedgerLine(`Week 16: Bank didn't waive — fee -$${fee}`); return `-$${fee} fee, waiver denied`; } }
+    }
+  ]
+},
+
+/* ══ WEEK 17 – October ══ */
+{
+  id:"w17_main", week:17, bonus:false, category:"daily",
+  title: j => "October: Halloween Spending",
+  body:  j => "Halloween is coming. Friends want to go all out — costumes, parties. Estimate: $40 total. You could DIY for $10. What do you do?",
+  options: (j,s) => [
+    { label:"Go all out — $40 fun!", hint:"-$40 wants",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-40); st.plan.wants+=5; addLedgerLine("Week 17: Halloween all out -$40"); return "-$40 wants spending, great memories"; }
+    },
+    { label:"DIY costume — $10", hint:"-$10, creative solution",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-10); addLedgerLine("Week 17: DIY Halloween -$10"); return "-$10 creative savings"; },
+      consequences:[{ triggerWeek:19, id:"c_halloween_diy", label:"DIY Bonus", major:false,
+        apply:(st)=>{ st.bank.savings+=15; addLedgerLine("↩ DIY Halloween discipline — savings +$15"); return "+$15 savings from Halloween discipline"; } }]
+    },
+    { label:"Skip Halloween spending", hint:"No cost",
+      apply:(st)=>{ addLedgerLine("Week 17: Skipped Halloween spending"); return "No Halloween cost"; }
+    }
+  ]
+},
+
+/* ══ WEEK 18 ══ */
+{
+  id:"w18_main", week:18, bonus:false, category:"investing",
+  title: j => "School Business Class Project",
+  body:  j => "Your business class has a virtual investing competition. You get a pretend $200 to invest. But your teacher also offers $10 real cash bonus if you show a real investment account. Do you open a real one?",
+  options: (j,s) => [
+    { label:"Open real account + show teacher", hint:"-$25 to open, +$10 bonus",
+      apply:(st)=>{ st.bank.hysaPrincipal+=25; st.bank.savingsType="hysa"; st.bank.checking+=10; addLedgerLine("Week 18: Opened real investing account +$10 teacher bonus"); addCoverage(8); return "Real account opened, teacher bonus +$10"; }
+    },
+    { label:"Just do the virtual project", hint:"No cost or gain",
+      apply:(st)=>{ addLedgerLine("Week 18: Did virtual investing project only"); addCoverage(8); return "Virtual project only"; }
+    }
+  ]
+},
+{
+  id:"w18_bonus", week:18, bonus:true, category:"contract",
+  title: j => "Contract Fine Print Discovery",
+  body:  j => "You find out your phone contract has a data overage clause — if you use over 5GB, it charges $10 extra. Last month you used 6GB. Did you check your bill?",
+  options: (j,s) => [
+    { label:"Dispute the overage charge", hint:"Credit +4, maybe refund",
+      apply:(st)=>{ st.credit=Math.min(850,st.credit+4); addLedgerLine("Week 18 bonus: Disputed phone overage"); addCoverage(13); addCoverage(11); return "Dispute filed — credit +4"; },
+      consequences:[{ triggerWeek:21, id:"c_overage_dispute", label:"Overage Dispute Result", major:false,
+        apply:(st)=>{ st.bank.checking+=10; addLedgerLine("↩ Phone overage dispute resolved — $10 refund"); return "+$10 refund on phone overage"; } }]
+    },
+    { label:"Pay it without questioning", hint:"-$10",
+      apply:(st)=>{ st.bank.checking=Math.max(0,st.bank.checking-10); addLedgerLine("Week 18 bonus: Paid phone overage without dispute -$10"); return "-$10 paid"; }
+    }
+  ]
+},
+
+/* ══ WEEK 19 ══ */
+{
+  id:"w19_main", week:19, bonus:false, category:"ledger",
+  title: j => `${j.name}: Price Your Services`,
+  body:  j => "You've been doing this job for 4 months. You could raise your rates by $5 per session/job now. Some clients might leave, but most probably won't.",
+  options: (j,s) => [
+    { label:"Raise rates — you've earned it", hint:"+$5/session",
+      apply:(st)=>{ st.plan.income=Math.round(st.plan.income*1.05); addLedgerLine("Week 19: Raised rates 5% — income increased"); return "Rates raised +5% income"; },
+      consequences:[{ triggerWeek:22, id:"c_rate_raise", label:"Rate Raise Result", major:false,
+        apply:(st)=>{ const keep=Math.random()>0.3; if(keep){ addLedgerLine("↩ Rate raise — all clients stayed"); return "All clients accepted your new rate. Your work speaks for itself!"; } else { st.plan.income=Math.round(st.plan.income*0.95); addLedgerLine("↩ Rate raise — 1 client left, income slight drop"); return "One client left after the rate increase, small income dip. Still worth it long term."; } } }]
+    },
+    { label:"Keep current rates", hint:"No change",
+      apply:(st)=>{ addLedgerLine("Week 19: Kept current rates"); return "Rates unchanged"; }
+    }
+  ]
+},
+
+/* ══ WEEK 20 ══ */
+{
+  id:"w20_main", week:20, bonus:false, category:"banking",
+  title: j => "CD Maturity — Reinvest or Cash Out?",
+  body:  j => "Your 3-month CD from week 12 is about to mature. You'll get principal + 4% back. Do you reinvest it or cash out?",
+  options: (j,s) => [
+    { label:"Reinvest into a 6-month CD", hint:"Locked until May • 4.5%",
+      apply:(st)=>{ const val=Math.round(55*1.04); createCD("6m",val,true,"bonus"); addLedgerLine(`Week 20: Reinvested matured CD into 6-month CD — $${val}`); addCoverage(4); addCoverage(9); return `Reinvested $${val} into 6-month CD`; }
+    },
+    { label:"Cash it out — take the profit", hint:"Money back + small gain",
+      apply:(st)=>{ const gain=Math.round(50*0.04); st.bank.savings+=50+gain; addLedgerLine(`Week 20: CD cashed out +$${50+gain}`); addCoverage(4); return `+$${50+gain} to savings`; }
+    }
+  ]
+},
+{
+  id:"w20_bonus", week:20, bonus:true, category:"daily",
+  title: j => "Study Group vs. Extra Work Shift",
+  body:  j => "Your study group meets Friday evening — same time as a client who wants extra work. Extra shift pays $20. Missing study group could hurt your grade.",
+  options: (j,s) => [
+    { label:"Go to study group", hint:"Grades protected, miss $20",
+      apply:(st)=>{ st.credit=Math.min(850,st.credit+4); addLedgerLine("Week 20 bonus: Chose study group — credit +4"); return "Grades protected — credit +4"; }
+    },
+    { label:"Take the work shift — $20", hint:"+$20, grade risk",
+      apply:(st)=>{ st.bank.checking+=20; addLedgerLine("Week 20 bonus: Took work shift +$20"); return "+$20 checking"; },
+      consequences:[{ triggerWeek:23, id:"c_skip_study", label:"Grade Impact", major:false,
+        apply:(st)=>{ st.credit=Math.max(300,st.credit-5); addLedgerLine("↩ Skipped study group — grade hurt credit -5"); return "Missing the study group caught up — credit -5"; } }]
+    }
+  ]
+},
+
+/* ══ WEEK 21 – November ══ */
+{
+  id:"w21_main", week:21, bonus:false, category:"daily",
+  title: j => "Family Asks for Money",
+  body:  j => "A family member asks you to contribute $30 toward Thanksgiving dinner costs. You have it but it wasn't planned. What do you do?",
+  options: (j,s) => [
+    { label:"Contribute the $30", hint:"-$30 cash",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-30); addLedgerLine("Week 21: Contributed to Thanksgiving -$30"); return "-$30 family contribution"; },
+      consequences:[{ triggerWeek:25, id:"c_family_give", label:"Family Goodwill", major:false,
+        apply:(st)=>{ st.bank.checking+=20; addLedgerLine("↩ Family goodwill — holiday job referral +$20"); return "+$20 holiday job referral from family goodwill"; } }]
+    },
+    { label:"Offer $10 — what I can do", hint:"-$10 compromise",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-10); addLedgerLine("Week 21: Partial family contribution -$10"); return "-$10 compromise"; }
+    },
+    { label:"Explain your budget limits", hint:"No cost — communication",
+      apply:(st)=>{ addLedgerLine("Week 21: Explained budget limits to family"); return "Communicated budget limits"; }
+    }
+  ]
+},
+
+/* ══ WEEK 22 ══ */
+{
+  id:"w22_main", week:22, bonus:false, category:"inheritance",
+  title: j => "Late Uncle's Inheritance Echo",
+  body:  j => "Three months ago you received that birthday gift/windfall. The IRS now sends a small notice: gifts over $100 may have a $28 tax implication. Do you pay it or dispute it?",
+  options: (j,s) => [
+    { label:"Pay the $28 tax bill", hint:"-$28 • responsible move",
+      apply:(st)=>{ payFromCheckingThenCashThenSavings(28); st.credit=Math.min(850,st.credit+5); addLedgerLine("Week 22: Paid inheritance tax echo -$28, credit +5"); addCoverage(10); return "-$28 paid, credit +5"; }
+    },
+    { label:"Research it first — might not apply", hint:"No cost yet",
+      apply:(st)=>{ addLedgerLine("Week 22: Researching inheritance tax notice"); return "Researching — smart consumer"; },
+      consequences:[{ triggerWeek:26, id:"c_inherit_tax_research", label:"Tax Research Outcome", major:true,
+        apply:(st)=>{ const owe=Math.random()>0.5; if(owe){ payFromCheckingThenCashThenSavings(28); addLedgerLine("↩ Tax research — owed $28 after all"); return "Research confirmed the $28 was owed. Paid now. Interest + delay added $4."; } else { st.credit=Math.min(850,st.credit+6); addLedgerLine("↩ Tax research — didn't apply, credit +6"); return "Turns out the tax didn't apply to your situation. Credit +6 for doing your homework."; } } }]
+    }
+  ]
+},
+{
+  id:"w22_bonus", week:22, bonus:true, category:"billing",
+  title: j => "Subscription You Forgot About",
+  body:  j => "You check your statement and find a $9/month gaming subscription you forgot about. It's been charging for 3 months — $27 total. Cancel or dispute?",
+  options: (j,s) => [
+    { label:"Dispute and cancel", hint:"Maybe get 1-2 months back",
+      apply:(st)=>{ st.bank.checking+=9; st.credit=Math.min(850,st.credit+3); addLedgerLine("Week 22 bonus: Cancelled forgotten sub, partial refund +$9"); addCoverage(11); return "+$9 partial refund, cancelled sub, credit +3"; }
+    },
+    { label:"Cancel only — no dispute", hint:"No more charges",
+      apply:(st)=>{ addLedgerLine("Week 22 bonus: Cancelled forgotten subscription"); addCoverage(10); return "Subscription cancelled"; }
+    },
+    { label:"Keep it — I forgot I liked it", hint:"-$9/mo continues",
+      apply:(st)=>{ st.bank.checking=Math.max(0,st.bank.checking-9); addLedgerLine("Week 22 bonus: Kept forgotten subscription -$9"); return "-$9/mo continues"; }
+    }
+  ]
+},
+
+/* ══ WEEK 23 ══ */
+{
+  id:"w23_main", week:23, bonus:false, category:"daily",
+  title: j => "Holiday Gift Pressure",
+  body:  j => "The holidays are coming. Friends expect gifts. You could spend $50 on gifts, make DIY gifts for $10, or set a budget limit and communicate it.",
+  options: (j,s) => [
+    { label:"Spend $50 on gifts", hint:"-$50 cash",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-50); addLedgerLine("Week 23: Holiday gifts -$50"); return "-$50 holiday spending"; }
+    },
+    { label:"DIY gifts — $10 materials", hint:"-$10 • thoughtful + cheap",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-10); st.bank.savings+=20; addLedgerLine("Week 23: DIY holiday gifts -$10, saved $20"); return "-$10 DIY, +$20 savings"; }
+    },
+    { label:"Set $15 limit, communicate it", hint:"-$15 • honest approach",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-15); addLedgerLine("Week 23: Budget holiday gifts -$15"); return "-$15 budget gifts"; }
+    }
+  ]
+},
+
+/* ══ WEEK 24 ══ */
+{
+  id:"w24_main", week:24, bonus:false, category:"ledger",
+  title: j => `${j.name}: December Slowdown`,
+  body:  j => "December is slow for most jobs. You have two options: pick up seasonal work (wrapping gifts at a store for $12/hr, 5 hrs/week) or enjoy the break.",
+  options: (j,s) => [
+    { label:"Take seasonal work — $60 extra", hint:"+$60 this month",
+      apply:(st)=>{ st.bank.checking+=60; addLedgerLine("Week 24: Seasonal work +$60"); return "+$60 seasonal income"; }
+    },
+    { label:"Enjoy the break — recharge", hint:"No income, good rest",
+      apply:(st)=>{ addLedgerLine("Week 24: Took holiday break"); return "Rest and recharge"; },
+      consequences:[{ triggerWeek:29, id:"c_jan_recharged", label:"January Energy Boost", major:false,
+        apply:(st)=>{ st.bank.checking+=12; addLedgerLine("↩ Holiday rest paid off — January energy +$12 job"); return "+$12 from energized January start"; } }]
+    }
+  ]
+},
+{
+  id:"w24_bonus", week:24, bonus:true, category:"savings",
+  title: j => "Year-End Savings Push",
+  body:  j => "You're 6 months from finishing the year. Do you do a big savings push now — cut wants by $20 for the next 4 weeks and send it to savings?",
+  options: (j,s) => [
+    { label:"Yes — push $20 to savings", hint:"-$20 wants, +$20 savings/wk",
+      apply:(st)=>{ st.plan.wants=Math.max(0,st.plan.wants-20); st.bank.savings+=20; addLedgerLine("Week 24 bonus: Savings push -$20 wants, +$20 savings"); return "Savings push started"; },
+      consequences:[{ triggerWeek:28, id:"c_savings_push", label:"Savings Push Result", major:false,
+        apply:(st)=>{ st.bank.savings+=60; addLedgerLine("↩ 4-week savings push completed — +$60 to savings"); return "+$60 from consistent savings push"; } }]
+    },
+    { label:"Not now — enjoying the holidays", hint:"No change",
+      apply:(st)=>{ addLedgerLine("Week 24 bonus: Skipped savings push"); return "No savings push"; }
+    }
+  ]
+},
+
+/* ══ WEEK 25 – December ══ */
+{
+  id:"w25_main", week:25, bonus:false, category:"contract",
+  title: j => "Year-End Contract Review",
+  body:  j => "You've had a contract active for months. Auto-renewal is coming in January. Do you review and decide now, or let it roll?",
+  options: (j,s) => [
+    { label:"Review and cancel if not needed", hint:"Save monthly cost",
+      apply:(st)=>{ if(st.contractActive){ const c=CONTRACTS.find(x=>x.id===st.contractId)||CONTRACTS[0]; st.bank.checking+=c.monthly; st.contractActive=false; addLedgerLine(`Week 25: Cancelled contract ${c.name}, saved $${c.monthly}/mo`); addCoverage(10); addCoverage(13); return `Cancelled ${c.name} — saved $${c.monthly}/mo`; } else { addLedgerLine("Week 25: No active contract to cancel"); return "No active contract"; } }
+    },
+    { label:"Let it auto-renew — it's fine", hint:"-monthly cost continues",
+      apply:(st)=>{ addLedgerLine("Week 25: Let contract auto-renew"); return "Auto-renewal allowed"; },
+      consequences:[{ triggerWeek:30, id:"c_jan_autorenew", label:"January Auto-Renewal", major:true,
+        apply:(st)=>{ const c=CONTRACTS.find(x=>x.id===st.contractId)||CONTRACTS[0]; if(st.contractActive){ st.bank.checking=Math.max(0,st.bank.checking-c.monthly); addLedgerLine(`↩ January auto-renewal -$${c.monthly}`); return `Your contract auto-renewed in January. -$${c.monthly} from checking. Did you mean for this?`; } return "No active contract renewed"; } }]
+    }
+  ]
+},
+
+/* ══ WEEK 26 ══ */
+{
+  id:"w26_main", week:26, bonus:false, category:"banking",
+  title: j => "Holiday Bonus Decision",
+  body:  j => "A client gives you a $40 holiday bonus. Unexpected! Where does it go?",
+  options: (j,s) => [
+    { label:"Split: $20 savings, $20 fun", hint:"Balanced bonus use",
+      apply:(st)=>{ st.bank.savings+=20; st.cash+=20; addLedgerLine("Week 26: Holiday bonus split — +$20 savings, +$20 cash"); return "+$20 savings, +$20 cash"; }
+    },
+    { label:"All to savings goal", hint:"+$40 savings",
+      apply:(st)=>{ st.bank.savings+=40; addLedgerLine("Week 26: Holiday bonus all to savings +$40"); return "+$40 savings push"; }
+    },
+    { label:"Spend it on holiday fun", hint:"+$40 wants",
+      apply:(st)=>{ st.cash+=40; st.plan.wants+=10; addLedgerLine("Week 26: Holiday bonus spent on fun"); return "+$40 wants spending"; }
+    }
+  ]
+},
+{
+  id:"w26_bonus", week:26, bonus:true, category:"daily",
+  title: j => "Credit Card Offer in the Mail",
+  body:  j => "You got a 'pre-approved' student credit card offer in the mail. 22% APR. No annual fee. You're 16 — you'd need a co-signer. Is this the right time?",
+  options: (j,s) => [
+    { label:"Apply with parent co-signer", hint:"Build credit early, risk if misused",
+      apply:(st)=>{ st.credit=Math.min(850,st.credit+8); addLedgerLine("Week 26 bonus: Applied for student credit card — credit +8"); addCoverage(5); return "Credit card opened — credit +8 for credit history start"; },
+      consequences:[{ triggerWeek:34, id:"c_credit_card", label:"Credit Card Balance Check", major:true,
+        apply:(st)=>{ const balance=25; st.bank.checking=Math.max(0,st.bank.checking-balance); addLedgerLine(`↩ Credit card balance unpaid -$${balance} interest hit`); return `You missed a credit card payment. -$${balance} interest charge. Credit cards need to be paid in full each month.`; } }]
+    },
+    { label:"Not yet — too early", hint:"No credit risk",
+      apply:(st)=>{ addLedgerLine("Week 26 bonus: Declined credit card offer"); addCoverage(5); return "Smart — waited on credit card"; }
+    }
+  ]
+},
+
+/* ══ WEEK 27 ══ */
+{
+  id:"w27_main", week:27, bonus:false, category:"daily",
+  title: j => "End of Year Reflection Spending",
+  body:  j => "New Year's eve party — friends want to spend $35 each. You've been disciplined all year. Do you splurge once?",
+  options: (j,s) => [
+    { label:"Splurge — you earned it!", hint:"-$35 wants",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-35); st.plan.wants+=5; addLedgerLine("Week 27: New Year splurge -$35"); return "-$35 NYE spending"; }
+    },
+    { label:"Keep it to $15", hint:"-$15 balanced",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-15); addLedgerLine("Week 27: Budget NYE -$15"); return "-$15 modest NYE"; }
+    },
+    { label:"Host something affordable", hint:"-$10 host",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-10); st.credit=Math.min(850,st.credit+3); addLedgerLine("Week 27: Hosted affordable gathering -$10, credit +3"); return "-$10, social credit +3"; }
+    }
+  ]
+},
+
+/* ══ WEEK 28 ══ */
+{
+  id:"w28_main", week:28, bonus:false, category:"ledger",
+  title: j => "Year Review: How's the Business?",
+  body:  j => `You've been doing ${j.name} for 7 months. A local business asks if you'd want to sub-contract — they'll give you steady work at a fixed $50/week but you lose the ability to take your own clients.`,
+  options: (j,s) => [
+    { label:"Take the contract — steady $50/wk", hint:"Stable income, less freedom",
+      apply:(st)=>{ st.plan.income=50*4; addLedgerLine("Week 28: Sub-contract deal — steady $200/mo income"); return "Sub-contract: steady $200/month"; }
+    },
+    { label:"Stay independent — keep your clients", hint:"Variable income, more freedom",
+      apply:(st)=>{ addLedgerLine("Week 28: Stayed independent"); return "Stayed independent"; },
+      consequences:[{ triggerWeek:32, id:"c_independent_reward", label:"Independent Work Reward", major:false,
+        apply:(st)=>{ st.bank.checking+=30; addLedgerLine("↩ Staying independent paid off — landed big client +$30"); return "+$30 from landing your own big client"; } }]
+    }
+  ]
+},
+{
+  id:"w28_bonus", week:28, bonus:true, category:"investing",
+  title: j => "New Year Investment Goal",
+  body:  j => "It's January. Financial influencers are pushing 'index funds.' Your teacher says index funds are good for long-term investing. You have $50 to commit. Go?",
+  options: (j,s) => [
+    { label:"Put $50 into index fund (simulated)", hint:"-$50 now, grows long term",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-50); st.bank.hysaPrincipal+=50; addLedgerLine("Week 28 bonus: $50 into simulated index fund"); addCoverage(8); return "$50 invested in index fund simulation"; },
+      consequences:[{ triggerWeek:44, id:"c_index_fund", label:"Index Fund Check-In", major:true,
+        apply:(st)=>{ const growth=Math.round(50*0.07); st.bank.hysaPrincipal+=growth; addLedgerLine(`↩ Index fund simulation up +$${growth}`); return `Your simulated index fund grew +$${growth} over 16 weeks. Long-term investing works!`; } }]
+    },
+    { label:"Not sure — research more", hint:"No investment yet",
+      apply:(st)=>{ addLedgerLine("Week 28 bonus: Researching index funds"); addCoverage(8); return "Researching — smart"; }
+    }
+  ]
+},
+
+/* ══ WEEK 29 – January ══ */
+{
+  id:"w29_main", week:29, bonus:false, category:"daily",
+  title: j => "New Year Resolutions — Budget Edition",
+  body:  j => "New year means new financial habits. You pick one resolution. Which do you commit to for the next month?",
+  options: (j,s) => [
+    { label:"Save $10 extra every week", hint:"+$40 savings this month",
+      apply:(st)=>{ st.bank.savings+=40; addLedgerLine("Week 29: New Year resolution — +$40 savings"); return "+$40 savings resolution"; },
+      consequences:[{ triggerWeek:33, id:"c_resolution_save", label:"Resolution Check", major:false,
+        apply:(st)=>{ st.bank.savings+=40; addLedgerLine("↩ Kept savings resolution — +$40 more"); return "+$40 continued resolution savings"; } }]
+    },
+    { label:"Cut one want each week", hint:"Save $10-20/week",
+      apply:(st)=>{ st.plan.wants=Math.max(0,st.plan.wants-15); st.bank.savings+=15; addLedgerLine("Week 29: Cut wants resolution — +$15 savings"); return "Cut wants, +$15 savings"; }
+    },
+    { label:"Track every purchase", hint:"Awareness, no cost",
+      apply:(st)=>{ st.credit=Math.min(850,st.credit+4); addLedgerLine("Week 29: Tracking purchases — financial awareness credit +4"); return "Awareness habit — credit +4"; }
+    }
+  ]
+},
+
+/* ══ WEEK 30 ══ */
+{
+  id:"w30_main", week:30, bonus:false, category:"billing",
+  title: j => "January Tax Prep",
+  body:  j => "You earned over $600 this year, so you might owe taxes. You can: pay a tax prep service $25, use free software, or ask a parent to help for free.",
+  options: (j,s) => [
+    { label:"Pay $25 for tax prep service", hint:"-$25 • professional help",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-25); st.credit=Math.min(850,st.credit+6); addLedgerLine("Week 30: Paid tax prep $25 — credit +6"); addCoverage(10); return "-$25, taxes filed, credit +6"; }
+    },
+    { label:"Use free tax software", hint:"No cost • learning experience",
+      apply:(st)=>{ st.credit=Math.min(850,st.credit+4); addLedgerLine("Week 30: Used free tax software — credit +4"); addCoverage(10); return "Free software, credit +4"; }
+    },
+    { label:"Ask parent to help — free", hint:"No cost",
+      apply:(st)=>{ addLedgerLine("Week 30: Parent helped with taxes"); addCoverage(10); return "Parent helped — free taxes"; }
+    }
+  ]
+},
+{
+  id:"w30_bonus", week:30, bonus:true, category:"contract",
+  title: j => "Referral Client Offer",
+  body:  j => `A new client found you through referral and wants a 3-month service contract for your ${j.name} job — $${Math.round(state.plan.income/4*3)} total, paid upfront. It's guaranteed but you'd be locked in.`,
+  options: (j,s) => [
+    { label:"Accept the contract — guaranteed $", hint:"Steady income, less flexibility",
+      apply:(st,j)=>{ const amt=Math.round(st.plan.income/4*3); st.bank.checking+=amt; addLedgerLine(`Week 30 bonus: 3-month client contract +$${amt}`); addCoverage(10); addCoverage(13); return `+$${amt} contract income`; }
+    },
+    { label:"Negotiate month-to-month", hint:"Less upfront, more flexibility",
+      apply:(st,j)=>{ const amt=Math.round(st.plan.income/4); st.bank.checking+=amt; addLedgerLine(`Week 30 bonus: Month-to-month negotiated +$${amt}`); return `+$${amt} month deal`; }
+    },
+    { label:"Decline — keep it casual", hint:"No change",
+      apply:(st)=>{ addLedgerLine("Week 30 bonus: Declined referral contract"); return "Stayed casual"; }
+    }
+  ]
+},
+
+/* ══ WEEK 31 ══ */
+{
+  id:"w31_main", week:31, bonus:false, category:"daily",
+  title: j => "Winter Weather Problem",
+  body:  j => {
+    const map={lawn:"Snow and ice — can't mow. Zero income this week unless you pivot.",pet:"Pet sitting demand surges in winter (people travel). You could take 2 extra clients for $30 more.",babysitting:"School cancellations mean more babysitting demand. Take extra jobs +$25?",dogwalk:"Dangerous icy paths. Cancel all walks and refund, or bundle dogs in shorter routes?",cars:"Nobody wants car washes in freezing temps. Week off or offer interior detailing ($15)?",tutor:"Exam week — students desperately need extra help. Offer weekend sessions +$20?",chores:"Winter means more indoor cleaning jobs. Up your rate for deep cleans +$15?",errands:"Bad weather means more delivery/errand demand. Take 3 extra runs +$18?",crafts:"Winter market season — crafts sell well. Set up extra booth day for $20 extra cost, gain $50?"};
+    return (map[j.id]||map.lawn);
+  },
+  options: (j,s) => [
+    { label:"Seize the winter opportunity", hint:"Varies by job, net positive",
+      apply:(st,j)=>{ const bonus={lawn:0,pet:30,babysitting:25,dogwalk:0,cars:15,tutor:20,chores:15,errands:18,crafts:30}[j.id]||15; st.bank.checking+=bonus; addLedgerLine(`Week 31: Winter opportunity +$${bonus}`); return `+$${bonus} winter opportunity`; }
+    },
+    { label:"Take the week off", hint:"No income, rest",
+      apply:(st)=>{ addLedgerLine("Week 31: Winter week off"); return "Week off, no income"; }
+    }
+  ]
+},
+
+/* ══ WEEK 32 ══ */
+{
+  id:"w32_main", week:32, bonus:false, category:"banking",
+  title: j => "Savings Goal Checkup",
+  body:  j => `You set a savings goal at the start. You're ${Math.round((state.bank.savings / (state.savingsGoal||1)) * 100)}% there. Do you do a mid-year push or stay the course?`,
+  options: (j,s) => [
+    { label:"Mid-year push — $25 extra to savings", hint:"+$25 savings this week",
+      apply:(st)=>{ st.bank.checking=Math.max(0,st.bank.checking-25); st.bank.savings+=25; addLedgerLine("Week 32: Mid-year savings push +$25"); return "+$25 savings push"; }
+    },
+    { label:"Stay the course — on track", hint:"No change",
+      apply:(st)=>{ addLedgerLine("Week 32: Staying the course on savings"); return "On track, no change"; }
+    },
+    { label:"Revisit the goal — lower it", hint:"Less pressure",
+      apply:(st)=>{ if(st.savingsGoal>50){ st.savingsGoal=Math.round(st.savingsGoal*0.8); addLedgerLine(`Week 32: Revised savings goal down to $${st.savingsGoal}`); return `Goal lowered to $${st.savingsGoal}`; } return "Goal already modest"; }
+    }
+  ]
+},
+{
+  id:"w32_bonus", week:32, bonus:true, category:"ledger",
+  title: j => `${j.name}: Client Problem`,
+  body:  j => {
+    const map={lawn:"A client says you damaged their flower bed. They want $20 off.",pet:"A pet got loose while you were pet sitting. Client is upset — wants $15 refund.",babysitting:"A child scraped their knee on your watch. Family wants $10 back.",dogwalk:"You were late on a dog walk. Client wants 30% off that session.",cars:"You scratched a car door (tiny scratch). Owner wants $25.",tutor:"Student failed a test after your session. Parent wants a refund — $30.",chores:"Broke a small item while cleaning. Owner wants $15.",errands:"Package was late because you forgot. Client wants $10 refund.",crafts:"A craft item broke after sale. Customer wants a refund — $12."};
+    return (map[j.id]||map.lawn) + " What do you do?";
+  },
+  options: (j,s) => [
+    { label:"Accept responsibility — make it right", hint:"-$10 to $30 • reputation",
+      apply:(st,j)=>{ const cost={lawn:20,pet:15,babysitting:10,dogwalk:10,cars:25,tutor:30,chores:15,errands:10,crafts:12}[j.id]||15; st.bank.checking=Math.max(0,st.bank.checking-cost); st.credit=Math.min(850,st.credit+5); addLedgerLine(`Week 32 bonus: Made it right -$${cost}, credit +5`); return `-$${cost}, reputation protected, credit +5`; },
+      consequences:[{ triggerWeek:36, id:"c_client_issue_good", label:"Client Loyalty Reward", major:false,
+        apply:(st)=>{ st.bank.checking+=25; addLedgerLine("↩ Handled issue well — client stayed and referred +$25"); return "+$25 from client who respected how you handled the issue"; } }]
+    },
+    { label:"Dispute it — wasn't your fault", hint:"No cost, risk client loss",
+      apply:(st)=>{ addLedgerLine("Week 32 bonus: Disputed client complaint"); return "Disputed — no cost, relationship risk"; },
+      consequences:[{ triggerWeek:35, id:"c_client_issue_bad", label:"Client Left", major:false,
+        apply:(st)=>{ st.plan.income=Math.max(100,st.plan.income-15); addLedgerLine("↩ Disputed client — lost them, income -$15/mo"); return "Client left after dispute. Income -$15/month"; } }]
+    }
+  ]
+},
+
+/* ══ WEEK 33 – February ══ */
+{
+  id:"w33_main", week:33, bonus:false, category:"daily",
+  title: j => "Valentine's Day Spending",
+  body:  j => "Valentine's Day pressure. Cards + gifts for friends/significant other could hit $30. DIY cards cost $5. Skip it?",
+  options: (j,s) => [
+    { label:"Buy gifts and cards — $30", hint:"-$30 wants",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-30); addLedgerLine("Week 33: Valentine's Day spending -$30"); return "-$30 Valentine's"; }
+    },
+    { label:"DIY cards and small gifts — $5", hint:"-$5 thoughtful",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-5); st.bank.savings+=15; addLedgerLine("Week 33: DIY Valentine's -$5, saved $15"); return "-$5 DIY, +$15 savings"; }
+    },
+    { label:"Skip it — not a spender", hint:"No cost",
+      apply:(st)=>{ addLedgerLine("Week 33: Skipped Valentine's spending"); return "No Valentine's cost"; }
+    }
+  ]
+},
+
+/* ══ WEEK 34 ══ */
+{
+  id:"w34_main", week:34, bonus:false, category:"banking",
+  title: j => "HYSA vs. Checking — Balance Review",
+  body:  j => `You have $${state.bank.savings} in savings and $${state.bank.checking} in checking. Your HYSA has been growing. Do you move more money to maximize growth?`,
+  options: (j,s) => [
+    { label:"Move $30 more to HYSA", hint:"+$30 HYSA, better growth",
+      apply:(st)=>{ if(st.bank.checking>=30){ st.bank.checking-=30; st.bank.hysaPrincipal+=30; addLedgerLine("Week 34: Moved $30 more to HYSA"); addCoverage(4); return "+$30 HYSA"; } else { addLedgerLine("Week 34: Not enough in checking to move"); return "Not enough in checking"; } }
+    },
+    { label:"Keep balance as is", hint:"No change",
+      apply:(st)=>{ addLedgerLine("Week 34: Kept current balance split"); return "No change"; }
+    },
+    { label:"Move $20 from savings back to checking", hint:"More spending access",
+      apply:(st)=>{ if(st.bank.savings>=20){ st.bank.savings-=20; st.bank.checking+=20; addLedgerLine("Week 34: Moved $20 back to checking"); return "+$20 checking"; } else { return "Not enough in savings"; } }
+    }
+  ]
+},
+{
+  id:"w34_bonus", week:34, bonus:true, category:"daily",
+  title: j => "Snow Day Side Hustle",
+  body:  j => "Two snow days this week. You could shovel neighbors' driveways for $15 each or just relax. You have time for 3 driveways.",
+  options: (j,s) => [
+    { label:"Shovel all 3 — $45 hustle", hint:"+$45 income",
+      apply:(st)=>{ st.bank.checking+=45; addLedgerLine("Week 34 bonus: Snow day shoveling +$45"); return "+$45 snow hustle"; }
+    },
+    { label:"Do 1 driveway — $15", hint:"+$15 easy money",
+      apply:(st)=>{ st.bank.checking+=15; addLedgerLine("Week 34 bonus: Shoveled 1 driveway +$15"); return "+$15 quick cash"; }
+    },
+    { label:"Rest and relax", hint:"No income, good recovery",
+      apply:(st)=>{ addLedgerLine("Week 34 bonus: Rested on snow day"); return "Rested"; }
+    }
+  ]
+},
+
+/* ══ WEEK 35 ══ */
+{
+  id:"w35_main", week:35, bonus:false, category:"billing",
+  title: j => "Medical/Dental Bill Surprise",
+  body:  j => "A $45 medical copay bill arrived that you didn't expect. Your insurance (if you have it) might cover part. What do you do?",
+  options: (j,s) => [
+    { label:"Pay it immediately", hint:"-$45 checking or cash",
+      apply:(st)=>{ const ins=st.plan.insurance; const cost=ins==="strong"?15:ins==="basic"?30:45; payFromCheckingThenCashThenSavings(cost); st.credit=Math.min(850,st.credit+5); addLedgerLine(`Week 35: Medical bill paid -$${cost} (insurance: ${ins}), credit +5`); addCoverage(9); return `-$${cost} paid (insurance helped), credit +5`; }
+    },
+    { label:"Call to negotiate or payment plan", hint:"Smaller hit, over time",
+      apply:(st)=>{ const ins=st.plan.insurance; const cost=ins==="strong"?8:ins==="basic"?15:20; payFromCheckingThenCashThenSavings(cost); addLedgerLine(`Week 35: Medical bill payment plan -$${cost}/month`); addCoverage(9); return `-$${cost}/month payment plan`; },
+      consequences:[{ triggerWeek:38, id:"c_med_plan2", label:"Medical Bill Payment 2", major:false, apply:(st)=>{ const ins=st.plan.insurance; const cost=ins==="strong"?8:ins==="basic"?15:20; payFromCheckingThenCashThenSavings(cost); addLedgerLine(`↩ Medical payment plan -$${cost}`); return `-$${cost} medical payment`; } }]
+    },
+    { label:"Ignore it for now", hint:"Risk credit damage",
+      apply:(st)=>{ st.credit=Math.max(300,st.credit-15); addLedgerLine("Week 35: Ignored medical bill — credit -15"); return "Credit -15 for ignoring bill"; },
+      consequences:[{ triggerWeek:39, id:"c_med_ignore", label:"Bill Sent to Collections", major:true,
+        apply:(st)=>{ st.credit=Math.max(300,st.credit-20); payFromCheckingThenCashThenSavings(55); addLedgerLine("↩ Ignored medical bill → collections — credit -20, +$10 fee"); return "Medical bill went to collections. Credit -20 and $10 collection fee added. Always address bills early!"; } }]
+    }
+  ]
+},
+
+/* ══ WEEK 36 ══ */
+{
+  id:"w36_main", week:36, bonus:false, category:"ledger",
+  title: j => `${j.name}: Slow February`,
+  body:  j => "February is slow. You have two ways to grow: market yourself (flyers, social posts — costs $8) or wait for spring when demand naturally picks up.",
+  options: (j,s) => [
+    { label:"Spend $8 on marketing now", hint:"-$8, spring boost",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-8); addLedgerLine("Week 36: Marketing spend -$8"); return "-$8 marketing"; },
+      consequences:[{ triggerWeek:41, id:"c_marketing", label:"Spring Marketing Payoff", major:false,
+        apply:(st)=>{ st.bank.checking+=30; addLedgerLine("↩ February marketing paid off in spring +$30"); return "+$30 spring clients from February marketing"; } }]
+    },
+    { label:"Wait for spring naturally", hint:"No cost, normal growth",
+      apply:(st)=>{ addLedgerLine("Week 36: Waiting for spring demand"); return "Waiting for spring"; }
+    }
+  ]
+},
+{
+  id:"w36_bonus", week:36, bonus:true, category:"banking",
+  title: j => "Bank Statement Error",
+  body:  j => "Your bank statement shows a $14 fee you don't recognize — it wasn't disclosed when you opened the account. Dispute or accept it?",
+  options: (j,s) => [
+    { label:"Dispute the undisclosed fee", hint:"Likely win",
+      apply:(st)=>{ st.bank.checking+=14; st.credit=Math.min(850,st.credit+3); addLedgerLine("Week 36 bonus: Disputed bank fee — $14 refund, credit +3"); addCoverage(6); addCoverage(11); return "+$14 refund, credit +3"; }
+    },
+    { label:"Pay it and move on", hint:"-$14 accepted",
+      apply:(st)=>{ st.bank.checking=Math.max(0,st.bank.checking-14); addLedgerLine("Week 36 bonus: Accepted undisclosed fee -$14"); return "-$14 accepted"; }
+    }
+  ]
+},
+
+/* ══ WEEK 37 – March / Tax Season ══ */
+{
+  id:"w37_main", week:37, bonus:false, category:"billing",
+  title: j => "Tax Refund or Owe?",
+  body:  j => "Your taxes are filed. You're getting a $45 refund OR you owe $22 (depends on how you played). Either way, there's a decision: what do you do with refund / how do you pay if you owe?",
+  options: (j,s) => [
+    { label: state.credit >= 680 ? "Put refund in savings" : "Pay any owed taxes first",
+      hint: state.credit >= 680 ? "+$45 savings" : "-$22 checking",
+      apply:(st)=>{ if(st.credit>=680){ st.bank.savings+=45; addLedgerLine("Week 37: Tax refund to savings +$45"); addCoverage(10); return "+$45 refund to savings"; } else { payFromCheckingThenCashThenSavings(22); st.credit=Math.min(850,st.credit+5); addLedgerLine("Week 37: Paid tax owed -$22, credit +5"); addCoverage(10); return "-$22 taxes paid"; } }
+    },
+    { label:"Spend the refund on something fun", hint:"+$45 wants if refund",
+      apply:(st)=>{ if(st.credit>=680){ st.cash+=45; st.plan.wants+=10; addLedgerLine("Week 37: Spent tax refund on fun"); return "Tax refund spent on fun"; } else { payFromCheckingThenCashThenSavings(22); addLedgerLine("Week 37: Had to pay taxes owed -$22"); return "Taxes owed — paid"; } }
+    }
+  ]
+},
+
+/* ══ WEEK 38 ══ */
+{
+  id:"w38_main", week:38, bonus:false, category:"contract",
+  title: j => "Spring Contract Offer",
+  body:  j => `A neighbor wants to sign a 2-month spring contract for your ${j.name} services — guaranteed weekly income but you'd have to turn down other opportunities.`,
+  options: (j,s) => [
+    { label:"Sign the spring contract", hint:"Steady income, March-April",
+      apply:(st)=>{ const weekly=Math.round(st.plan.income/4); st.bank.checking+=weekly*2; addLedgerLine(`Week 38: Spring contract +$${weekly*2}`); addCoverage(10); addCoverage(13); return `+$${weekly*2} spring contract`; }
+    },
+    { label:"Stay flexible — no contract", hint:"Could earn more or less",
+      apply:(st)=>{ addLedgerLine("Week 38: Declined spring contract"); return "Flexible, no contract"; }
+    }
+  ]
+},
+{
+  id:"w38_bonus", week:38, bonus:true, category:"daily",
+  title: j => "Spring Sport / Activity Sign-up",
+  body:  j => "Spring sport registration is $55. It'd cut into work hours but is good for mental health and college apps. Pay or skip?",
+  options: (j,s) => [
+    { label:"Sign up — invest in yourself", hint:"-$55, work less",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-55); st.plan.income=Math.round(st.plan.income*0.9); st.credit=Math.min(850,st.credit+6); addLedgerLine("Week 38 bonus: Spring sport -$55, income -10%, credit +6"); return "-$55, income -10%, well-rounded credit +6"; }
+    },
+    { label:"Skip — focus on work and savings", hint:"No cost, full income",
+      apply:(st)=>{ addLedgerLine("Week 38 bonus: Skipped spring sport"); return "Focused on work"; }
+    }
+  ]
+},
+
+/* ══ WEEK 39 ══ */
+{
+  id:"w39_main", week:39, bonus:false, category:"investing",
+  title: j => "Spring Investing Opportunity",
+  body:  j => "Your school is running a mock stock market game with real-money prizes. Entry fee: $10. Top 3 win $50, $30, $20. You'd be simulating real investing. Enter?",
+  options: (j,s) => [
+    { label:"Enter the competition — $10", hint:"-$10, chance to win $20-$50",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-10); addLedgerLine("Week 39: Entered stock competition -$10"); addCoverage(8); return "-$10 entry fee"; },
+      consequences:[{ triggerWeek:43, id:"c_stock_comp", label:"Stock Competition Result", major:true,
+        apply:(st)=>{ const place=Math.floor(Math.random()*5); if(place===0){ st.bank.checking+=50; addLedgerLine("↩ Won stock competition 1st place +$50!"); return "You won 1st place in the stock competition! +$50. Your research paid off!"; } else if(place===1){ st.bank.checking+=30; addLedgerLine("↩ Won stock competition 2nd place +$30"); return "2nd place in the competition! +$30. Great result!"; } else if(place===2){ st.bank.checking+=20; addLedgerLine("↩ Won stock competition 3rd place +$20"); return "3rd place — +$20! You got your money back plus more."; } else { addLedgerLine("↩ Stock competition — didn't place, lost $10 entry"); return "You didn't place but learned a lot about investing. The $10 was a learning fee."; } } }]
+    },
+    { label:"Skip — too risky for $10", hint:"No cost",
+      apply:(st)=>{ addLedgerLine("Week 39: Skipped stock competition"); return "Skipped competition"; }
+    }
+  ]
+},
+
+/* ══ WEEK 40 ══ */
+{
+  id:"w40_main", week:40, bonus:false, category:"daily",
+  title: j => "Peer Pressure: New Sneakers",
+  body:  j => "Your friend group is getting new $80 sneakers. You have the money. But $80 is a big wants splurge. What do you do?",
+  options: (j,s) => [
+    { label:"Buy them — you've earned it", hint:"-$80 wants",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-80); st.plan.wants+=15; addLedgerLine("Week 40: Sneaker purchase -$80"); return "-$80 wants splurge"; },
+      consequences:[{ triggerWeek:44, id:"c_sneakers_buy", label:"Sneaker Budget Impact", major:false,
+        apply:(st)=>{ addLedgerLine("↩ Sneaker splurge tightened April budget"); return "That $80 sneaker purchase made April tighter. Watch wants spending near the year end."; } }]
+    },
+    { label:"Look for secondhand pair — $25", hint:"-$25 smart compromise",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-25); st.bank.savings+=35; addLedgerLine("Week 40: Secondhand sneakers -$25, saved $35"); return "-$25 smart buy, +$35 savings"; }
+    },
+    { label:"Skip — don't need them", hint:"No cost",
+      apply:(st)=>{ st.bank.savings+=20; addLedgerLine("Week 40: Skipped sneakers, +$20 savings instead"); return "No sneakers, +$20 savings"; }
+    }
+  ]
+},
+{
+  id:"w40_bonus", week:40, bonus:true, category:"ledger",
+  title: j => "Spring Business Boom",
+  body:  j => `Spring is here and demand for ${j.name} is back. You have two new clients wanting to start. Do you take both or stay at your current capacity?`,
+  options: (j,s) => [
+    { label:"Take both new clients", hint:"+$40 income/month",
+      apply:(st)=>{ st.plan.income=Math.round(st.plan.income*1.15); addLedgerLine("Week 40 bonus: Added 2 spring clients — income +15%"); return "Income +15% from new clients"; }
+    },
+    { label:"Take one new client", hint:"+$20 income/month",
+      apply:(st)=>{ st.plan.income=Math.round(st.plan.income*1.07); addLedgerLine("Week 40 bonus: Added 1 spring client — income +7%"); return "Income +7% from one new client"; }
+    },
+    { label:"Stay at current capacity", hint:"No change, less stress",
+      apply:(st)=>{ addLedgerLine("Week 40 bonus: Stayed at current capacity"); return "Capacity unchanged"; }
+    }
+  ]
+},
+
+/* ══ WEEK 41 – April ══ */
+{
+  id:"w41_main", week:41, bonus:false, category:"inheritance",
+  title: j => "Inheritance Echo: Final Tax Notice",
+  body:  j => "Remember that windfall/gift from August? The IRS sends a final notice. You owe $18 in gift tax or you get a $15 credit (depending on how you handled it). This closes the inheritance loop.",
+  options: (j,s) => [
+    { label:"Pay what's owed / claim the credit", hint:"Closes the loop",
+      apply:(st)=>{ const choiceKey = st.weekEngine.choices["w10_main"]; if(choiceKey===0){ st.bank.savings+=15; addLedgerLine("Week 41: Gift handled well — $15 tax credit"); addCoverage(5); addCoverage(10); return "+$15 tax credit for properly handled inheritance"; } else if(choiceKey===2){ payFromCheckingThenCashThenSavings(18); st.credit=Math.min(850,st.credit+4); addLedgerLine("Week 41: Gift tax notice — paid $18, closed loop, credit +4"); addCoverage(5); addCoverage(10); return "-$18 gift tax, loop closed, credit +4"; } else { st.bank.savings+=8; addLedgerLine("Week 41: Inheritance balance handled — $8 net"); addCoverage(5); return "+$8 net from balanced approach"; } }
+    }
+  ]
+},
+
+/* ══ WEEK 42 ══ */
+{
+  id:"w42_main", week:42, bonus:false, category:"banking",
+  title: j => "April: CD Maturity or HYSA Withdrawal?",
+  body:  j => "Any CDs you opened earlier are maturing. You can reinvest for the final stretch or cash out. Your HYSA has also been growing. Do you check and optimize?",
+  options: (j,s) => [
+    { label:"Reinvest maturing CDs", hint:"Max growth to year end",
+      apply:(st)=>{ if(st.bank.cds.length){ addLedgerLine("Week 42: CDs reinvested for final stretch"); addCoverage(4); addCoverage(9); return "CDs reinvested"; } else { st.bank.savings+=10; addLedgerLine("Week 42: No CDs — added $10 directly"); return "+$10 to savings"; } }
+    },
+    { label:"Cash out and put in HYSA", hint:"Flexible high growth",
+      apply:(st)=>{ const val=totalCdFunds(); if(val>0){ st.bank.cds=[]; st.bank.hysaPrincipal+=val; addLedgerLine(`Week 42: CD funds moved to HYSA — $${val}`); addCoverage(4); return `+$${val} to HYSA`; } else { st.bank.savings+=10; addLedgerLine("Week 42: No CDs — added $10 to HYSA"); st.bank.hysaPrincipal+=10; return "+$10 to HYSA"; } }
+    }
+  ]
+},
+{
+  id:"w42_bonus", week:42, bonus:true, category:"daily",
+  title: j => "Prom / School Dance Spending",
+  body:  j => "Prom is coming. All-in could hit $120 (ticket, outfit, dinner). Budget version: $40. Or skip it entirely.",
+  options: (j,s) => [
+    { label:"Go all-in — $120", hint:"-$120 wants splurge",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-120); st.plan.wants+=20; addLedgerLine("Week 42 bonus: Prom all-in -$120"); return "-$120 prom"; }
+    },
+    { label:"Budget prom — $40", hint:"-$40 smart compromise",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-40); addLedgerLine("Week 42 bonus: Budget prom -$40"); return "-$40 budget prom"; }
+    },
+    { label:"Skip prom — save the money", hint:"No cost",
+      apply:(st)=>{ st.bank.savings+=50; addLedgerLine("Week 42 bonus: Skipped prom — +$50 savings"); return "+$50 savings from skipping prom"; }
+    }
+  ]
+},
+
+/* ══ WEEK 43 ══ */
+{
+  id:"w43_main", week:43, bonus:false, category:"ledger",
+  title: j => `${j.name}: Year-End Business Review`,
+  body:  j => "You've been working nearly a year. Your business is established. A competitor offers to buy your client list for $80. Do you sell, keep going, or ask for more?",
+  options: (j,s) => [
+    { label:"Sell the client list — $80", hint:"+$80, business ends",
+      apply:(st)=>{ st.bank.checking+=80; st.plan.income=0; addLedgerLine("Week 43: Sold client list +$80, business ended"); return "+$80, business completed"; }
+    },
+    { label:"Keep going — you're not done", hint:"No change",
+      apply:(st)=>{ addLedgerLine("Week 43: Kept going — didn't sell"); return "Continuing business"; }
+    },
+    { label:"Counter-offer at $120", hint:"Maybe get more",
+      apply:(st)=>{ const accept=Math.random()>0.5; if(accept){ st.bank.checking+=120; st.plan.income=0; addLedgerLine("Week 43: Counter-offer accepted +$120"); return "+$120 counter-offer accepted!"; } else { addLedgerLine("Week 43: Counter-offer rejected"); return "Counter-offer rejected — kept business"; } }
+    }
+  ]
+},
+
+/* ══ WEEK 44 ══ */
+{
+  id:"w44_main", week:44, bonus:false, category:"daily",
+  title: j => "Senior Year Prep Cost",
+  body:  j => "College prep costs are hitting: SAT/ACT fees ($55), application fees ($40), etc. Do you budget for this or handle it differently?",
+  options: (j,s) => [
+    { label:"Pay SAT prep and app fees now — $95", hint:"-$95 investment in future",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-95); st.credit=Math.min(850,st.credit+6); addLedgerLine("Week 44: College prep fees -$95, credit +6"); return "-$95 college prep, credit +6"; }
+    },
+    { label:"Use savings — it's worth it", hint:"-$95 from savings",
+      apply:(st)=>{ st.bank.savings=Math.max(0,st.bank.savings-95); st.credit=Math.min(850,st.credit+6); addLedgerLine("Week 44: College fees from savings -$95, credit +6"); return "-$95 from savings, credit +6"; }
+    },
+    { label:"Look for fee waivers first", hint:"Maybe free",
+      apply:(st)=>{ const waiver=Math.random()>0.4; if(waiver){ st.credit=Math.min(850,st.credit+6); addLedgerLine("Week 44: Got fee waiver — no cost, credit +6"); return "Fee waiver approved! No cost, credit +6"; } else { st.cash=Math.max(0,st.cash-55); addLedgerLine("Week 44: Partial fees -$55 after waiver search"); return "-$55 after waiver attempt"; } }
+    }
+  ]
+},
+{
+  id:"w44_bonus", week:44, bonus:true, category:"savings",
+  title: j => "Savings Goal Final Push",
+  body:  j => `You have 4 weeks left. Your savings goal was $${state.savingsGoal}. You're at $${state.bank.savings + state.bank.hysaPrincipal}. Do you make a final push?`,
+  options: (j,s) => [
+    { label:"Final push — cut all wants this month", hint:"Max savings, tight month",
+      apply:(st)=>{ const cut=Math.min(40,st.plan.wants); st.plan.wants=Math.max(0,st.plan.wants-cut); st.bank.savings+=cut; addLedgerLine(`Week 44 bonus: Final savings push +$${cut}`); return `+$${cut} to savings from final push`; }
+    },
+    { label:"Stay the course", hint:"No change",
+      apply:(st)=>{ addLedgerLine("Week 44 bonus: Staying course on savings"); return "Steady as she goes"; }
+    }
+  ]
+},
+
+/* ══ WEEK 45 – May ══ */
+{
+  id:"w45_main", week:45, bonus:false, category:"contract",
+  title: j => "Final Contract Decision",
+  body:  j => "Any active contracts are coming up for renewal in May. This is your last chance to review all active subscriptions and contracts before the year ends.",
+  options: (j,s) => [
+    { label:"Cancel everything unnecessary", hint:"Save monthly costs",
+      apply:(st)=>{ const saved = st.contractActive ? (CONTRACTS.find(x=>x.id===st.contractId)||CONTRACTS[0]).monthly : 0; st.contractActive=false; st.bank.checking+=saved; addLedgerLine(`Week 45: Cancelled all unneeded contracts, saved $${saved}/mo`); addCoverage(10); addCoverage(13); return saved>0 ? `+$${saved} monthly savings, contracts cleaned up` : "No active contracts — already clean"; }
+    },
+    { label:"Keep what I'm using", hint:"Ongoing costs continue",
+      apply:(st)=>{ addLedgerLine("Week 45: Kept active contracts"); return "Active contracts continue"; }
+    }
+  ]
+},
+
+/* ══ WEEK 46 ══ */
+{
+  id:"w46_main", week:46, bonus:false, category:"banking",
+  title: j => "End-of-Year Banking Review",
+  body:  j => "One month left. Review your banking setup. Your checking and savings have grown all year. Do you do anything final with the money?",
+  options: (j,s) => [
+    { label:"Max out HYSA before year ends", hint:"Best interest for final month",
+      apply:(st)=>{ const move=Math.min(st.bank.checking-20, 50); if(move>0){ st.bank.checking-=move; st.bank.hysaPrincipal+=move; addLedgerLine(`Week 46: Moved $${move} to HYSA for year-end`); addCoverage(4); return `+$${move} to HYSA`; } else { addLedgerLine("Week 46: Not enough to move to HYSA"); return "Already optimized"; } }
+    },
+    { label:"Keep current setup", hint:"No change",
+      apply:(st)=>{ addLedgerLine("Week 46: Kept current banking setup"); return "Banking unchanged"; }
+    }
+  ]
+},
+{
+  id:"w46_bonus", week:46, bonus:true, category:"daily",
+  title: j => "Graduation Gift Spending",
+  body:  j => "A family friend graduated and you want to give them something. Cards are $5, a $20 gift card is thoughtful, or skip it since you have finals.",
+  options: (j,s) => [
+    { label:"$20 gift card — generous", hint:"-$20 cash",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-20); addLedgerLine("Week 46 bonus: Grad gift -$20"); return "-$20 gift"; }
+    },
+    { label:"$5 card — thoughtful and affordable", hint:"-$5",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-5); addLedgerLine("Week 46 bonus: Grad card -$5"); return "-$5 card"; }
+    },
+    { label:"No gift — focused on finals", hint:"No cost",
+      apply:(st)=>{ addLedgerLine("Week 46 bonus: Skipped grad gift, focused on finals"); return "No gift"; }
+    }
+  ]
+},
+
+/* ══ WEEK 47 ══ */
+{
+  id:"w47_main", week:47, bonus:false, category:"ledger",
+  title: j => "Second-to-Last Week — Wind Down",
+  body:  j => `Your ${j.name} year is almost done. Any remaining inventory or supplies? Sell them back for 50% value, donate them, or keep for next year.`,
+  options: (j,s) => [
+    { label:"Sell back supplies — 50% value", hint:"Recover some cash",
+      apply:(st)=>{ const val = Math.round(calcInventoryValue() * 0.5); if(val>0){ st.cash+=val; addLedgerLine(`Week 47: Sold back inventory for $${val}`); return `+$${val} from inventory sale`; } else { addLedgerLine("Week 47: No inventory to sell"); return "No inventory"; } }
+    },
+    { label:"Donate supplies", hint:"No cash, community good",
+      apply:(st)=>{ st.credit=Math.min(850,st.credit+4); addLedgerLine("Week 47: Donated supplies — credit +4"); return "Donated, credit +4"; }
+    },
+    { label:"Keep for next year", hint:"No change",
+      apply:(st)=>{ addLedgerLine("Week 47: Kept supplies for next year"); return "Supplies saved"; }
+    }
+  ]
+},
+
+/* ══ WEEK 48 – Final Week of May ══ */
+{
+  id:"w48_main", week:48, bonus:false, category:"daily",
+  title: j => "🎓 Year Complete — Final Reflection",
+  body:  j => `You made it through a full year of ${j.name}! Looking back, you made dozens of financial choices. What's your final move with any remaining cash?`,
+  options: (j,s) => [
+    { label:"Put everything extra in savings", hint:"Best financial finish",
+      apply:(st)=>{ const extra=Math.min(st.cash, 50); if(extra>0){ st.cash-=extra; st.bank.savings+=extra; } st.credit=Math.min(850,st.credit+5); addLedgerLine(`Week 48: Final year savings push +$${extra}, credit +5`); addCoverage(3); addCoverage(12); return `+$${extra} savings, credit +5 — great year!`; }
+    },
+    { label:"Celebrate a little — $20 fun", hint:"-$20 earned treat",
+      apply:(st)=>{ st.cash=Math.max(0,st.cash-20); st.bank.savings+=15; addLedgerLine("Week 48: Year-end celebration -$20, saved $15"); return "-$20 celebration, +$15 savings"; }
+    },
+    { label:"Invest the remainder in HYSA", hint:"Future-focused finish",
+      apply:(st)=>{ const extra=Math.min(st.cash, 60); if(extra>0){ st.cash-=extra; st.bank.hysaPrincipal+=extra; } st.credit=Math.min(850,st.credit+6); addLedgerLine(`Week 48: Year-end HYSA invest +$${extra}, credit +6`); addCoverage(8); addCoverage(12); return `+$${extra} to HYSA, credit +6 — future-focused finish!`; }
+    }
+  ]
+},
+{
+  id:"w48_bonus", week:48, bonus:true, category:"savings",
+  title: j => "Savings Goal Reached?",
+  body:  j => `Your savings goal was $${state.savingsGoal}. Total saved (savings + HYSA): $${state.bank.savings + state.bank.hysaPrincipal}. ${(state.bank.savings + state.bank.hysaPrincipal) >= state.savingsGoal ? "You hit your goal! 🎉" : "Close but not quite."} What do you take away from this year?`,
+  options: (j,s) => [
+    { label:"I'll start next year with a bigger goal", hint:"+credit milestone",
+      apply:(st)=>{ st.credit=Math.min(850,st.credit+8); addLedgerLine("Week 48 bonus: Year reflection — bigger goals ahead, credit +8"); addCoverage(12); return "Growth mindset — credit +8. See you next year!"; }
+    },
+    { label:"I'll focus on cutting wants next year", hint:"+savings mindset",
+      apply:(st)=>{ st.bank.savings+=15; addLedgerLine("Week 48 bonus: Committed to cutting wants next year +$15"); addCoverage(3); return "+$15 symbolic savings commitment"; }
+    }
+  ]
+}
+
+]; /* end WEEKLY_SCENARIOS */
+
+/* ── Engine integration: add to state ───────────────────── */
+/* Called once at mission start to initialize the engine */
+function initWeekEngine(){
+  state.weekEngine = {
+    week: 1,          // current week 1-48
+    choices: {},      // scenario id → choice index made
+    pending: [],      // consequence queue
+    ranBonus: {}      // week → true if bonus already ran
+  };
+}
+
+/* Get scenarios for a given week */
+function getScenariosForWeek(week){
+  return WEEKLY_SCENARIOS.filter(s => s.week === week);
+}
+
+/* Should the bonus scenario fire? */
+function shouldFireBonus(scenario){
+  if(!scenario.bonus) return false;
+  if(state.weekEngine.ranBonus[scenario.week]) return false;
+  // Conditional trigger
+  if(scenario.triggerIf){
+    return scenario.triggerIf(state.weekEngine.choices);
+  }
+  // Random ~37%
+  return Math.random() < 0.37;
+}
+
+/* Main weekly scenario runner — called from nextWeek() */
+function runWeeklyScenarios(week, onAllDone){
+  const all = getScenariosForWeek(week);
+  const main = all.find(s => !s.bonus);
+  const bonus = all.find(s => s.bonus);
+  const queue = [];
+
+  if(main) queue.push(main);
+  if(bonus && shouldFireBonus(bonus)){
+    queue.push(bonus);
+    state.weekEngine.ranBonus[week] = true;
+  }
+
+  let idx = 0;
+  function runNext(){
+    if(idx >= queue.length){ if(onAllDone) onAllDone(); return; }
+    const s = queue[idx++];
+    openScenarioModal(s, runNext);
+  }
+  runNext();
+}
+
+/* Update the header week/month display */
+function renderWeekHeader(){
+  const w = state.weekEngine ? state.weekEngine.week : 1;
+  const cal = WEEK_CALENDAR[Math.min(w,48)] || WEEK_CALENDAR[1];
+  if($("weekNum")) $("weekNum").textContent = w;
+  if($("monthName")) $("monthName").textContent = cal.name;
+  // Also update internal state.day to the calendar month for existing logic
+  state.day = cal.m;
+}
+
+
 /* =========================
    WGLT Budget Boss (Clean Single File)
    Upgrades included:
@@ -1203,7 +2733,8 @@ function openTab(name){
 /* UI render */
 function renderHeader(){
   $("cash").textContent = money(state.cash);
-  $("day").textContent = state.day;
+  if($("day")) $("day").textContent = state.day;
+  if(typeof renderWeekHeader === "function") renderWeekHeader();
   $("credit").textContent = state.credit;
   if ($("creditInlineVal")) $("creditInlineVal").textContent = state.credit;
   $("goalBadge").textContent = money(state.savingsGoal);
@@ -1397,8 +2928,8 @@ function renderProgress(){
   const pct=Math.round((m.index/total)*100);
   $("barFill").style.width=pct+"%";
   const cur=m.steps[m.index];
-  if(cur) $("stepMeta").textContent = `Step ${m.index+1}/${total} • ${cur.title} • Month ${state.day}/12`;
-  else $("stepMeta").textContent = `Mission complete • Day ${state.day}/30`;
+  if(cur) $("stepMeta").textContent = `Step ${m.index+1}/${total} • ${cur.title} • ${state.weekEngine ? "Week "+state.weekEngine.week+"/48" : "Month "+state.day+"/12"}`;
+  else $("stepMeta").textContent = "Mission complete • Week 48";
 }
 
 /* Money movement helpers */
@@ -1628,6 +3159,10 @@ function ledgerClearWeek(){
   renderHeader();
 }
 
+
+function totalCdFunds(){ return state.bank.cds.reduce((s,cd)=>s+cd.principal,0); }
+function calcInventoryValue(){ const cat=LEDGER_CATALOG[state.jobs[state.jobIndex].id]||[]; return Object.entries(state.ledger.inventory).reduce((sum,[id,qty])=>{ const item=cat.find(x=>x.id===id); return sum+(item?item.cost*qty:0); },0); }
+
 /* Mission system */
 function currentWeekIndex(){
   return state.day;
@@ -1785,6 +3320,8 @@ function startMission(){
   state.mission.index=0;
   state.mission.steps = buildMonthMissionSteps();
   state.mission.waitingAction=null;
+  initWeekEngine();
+  renderWeekHeader();
 
   state.savingsGoal = 0;
   state.savingsMilestones = new Set();
@@ -1796,7 +3333,7 @@ function startMission(){
   state.ledger.history=[];
   renderLedger();
 
-  setLog("Year mission started. Follow the glowing actions through all 12 months.");
+  setLog("Year mission started! June Week 1 — follow the glowing actions. Weekly choice cards appear each week.");
   renderAll();
   runCurrentMissionStep();
 }
@@ -1855,6 +3392,9 @@ function resetMission(){
   state.mission.waitingAction = null;
   state.mission.steps = [];
   state.jobLocked = false;
+  state.weekEngine = null;
+  if($("weekNum")) $("weekNum").textContent = "1";
+  if($("monthName")) $("monthName").textContent = "June";
 
   clearGlow();
   renderAll();
@@ -1894,7 +3434,7 @@ function runCurrentMissionStep(){
     renderProgress();
     applyLockRules();
     beep("success");
-    showBanner("Year complete!");
+    showBanner("48 Weeks Complete!");
     openModal({
       title:"🏁 Year Mission Complete",
       meta:"Nice work",
@@ -2635,36 +4175,47 @@ function applyWeeklyBankEffects(){
   updateImpactStrip(); renderCDStatus(); renderBucketTracker(); renderMeters();
 }
 
-/* Next month */
+/* Next week (48-week engine) */
 function nextWeek(){
-  if(state.day >= 12){
-    renderAll();
-    notifyAction("next_week");
+  if(state.weekEngine && state.mission.active){
+    const currentW = state.weekEngine.week;
+    if(currentW >= 48){ renderAll(); notifyAction("next_week"); return; }
+    const oldM = weekToMonth(currentW);
+    const newM  = weekToMonth(currentW + 1);
+    if(newM !== oldM){
+      applyWeeklyBankEffects();
+      checkSavingsMilestones();
+      state.day = newM;
+      if(state.plan.lockedForYear) applyMonthlyPlanForCurrentMonth();
+      addLedgerLine(`--- ${weekToMonthName(currentW+1)} started ---`);
+    }
+    state.ledger.weekExpenses = 0;
+    state.ledger.weekIncome   = 0;
+    state.ledger.weekProfit   = 0;
+    state.weekEngine.week += 1;
+    renderWeekHeader();
+    fireDueConsequences(state.weekEngine.week);
+    runWeeklyScenarios(state.weekEngine.week, ()=>{
+      renderAll(); renderSheet(); notifyAction("next_week");
+    });
     return;
   }
+  // Legacy / pre-mission path
+  if(state.day >= 12){ renderAll(); notifyAction("next_week"); return; }
   if(state.plan.lockedForYear){
-    applyWeeklyBankEffects();
-    checkSavingsMilestones();
+    applyWeeklyBankEffects(); checkSavingsMilestones();
     state.day = clamp(state.day + 1, 1, 12);
-    state.ledger.weekExpenses = 0;
-    state.ledger.weekIncome = 0;
-    state.ledger.weekProfit = 0;
+    state.ledger.weekExpenses = 0; state.ledger.weekIncome = 0; state.ledger.weekProfit = 0;
     addLedgerLine(`--- New month started (Month ${state.day}) ---`);
     applyMonthlyPlanForCurrentMonth();
   } else {
-    applyWeeklyBankEffects();
-    checkSavingsMilestones();
+    applyWeeklyBankEffects(); checkSavingsMilestones();
     state.day = clamp(state.day + 1, 1, 12);
-    state.ledger.weekExpenses = 0;
-    state.ledger.weekIncome = 0;
-    state.ledger.weekProfit = 0;
+    state.ledger.weekExpenses = 0; state.ledger.weekIncome = 0; state.ledger.weekProfit = 0;
     addLedgerLine(`--- New month started (Month ${state.day}) ---`);
-    setLog("Choose and lock a year plan before the next month auto-runs.");
+    setLog("Choose and lock a year plan before the next week auto-runs.");
   }
-
-  renderAll();
-  renderSheet();
-  notifyAction("next_week");
+  renderAll(); renderSheet(); notifyAction("next_week");
 }
 
 /* Local tax */
@@ -3092,7 +4643,7 @@ document.querySelectorAll(".tab").forEach(t=>t.addEventListener("click",()=>open
     state.jobIndex=(state.jobIndex-1+state.jobs.length)%state.jobs.length;
     state.plan.income=state.jobs[state.jobIndex].pay*4;
     applyBudgetModel(state.plan.model || "rule702010");
-    renderJob(); renderHeader(); renderSheet(); guideWantsStep();
+    renderJob(); renderHeader(); renderSheet();
   };
   $("jobNext").onclick=()=>{
     if(!state.plan.lockedForYear){ beep("warn"); showBanner("Lock the year plan first"); openTab("plan"); guidePreStart(); return; }
@@ -3101,10 +4652,20 @@ document.querySelectorAll(".tab").forEach(t=>t.addEventListener("click",()=>open
     state.jobIndex=(state.jobIndex+1)%state.jobs.length;
     state.plan.income=state.jobs[state.jobIndex].pay*4;
     applyBudgetModel(state.plan.model || "rule702010");
-    renderJob(); renderHeader(); renderSheet(); guideWantsStep();
+    renderJob(); renderHeader(); renderSheet();
   };
 
   $("btnStartMission").onclick=()=>{ beep("click"); startMission(); };
+  $("btnLockJob").onclick=()=>{
+    if(!state.plan.lockedForYear){ beep("warn"); showBanner("Lock the year plan first"); openTab("plan"); guidePreStart(); return; }
+    if(state.jobLocked || state.mission.active){ beep("warn"); showBanner("Job already locked — reset to change"); return; }
+    const job = state.jobs[state.jobIndex];
+    beep("success");
+    showBanner(job.name + " selected!");
+    setLog("Job locked: " + job.name + ". Now build your wants and tap Start Year Mission.");
+    guideWantsStep();
+    scrollToBtn("btnAddWant");
+  };
   $("btnPauseMission").onclick=()=>{ beep("click"); pauseMission(); };
   $("btnResetMission").onclick=()=>{ beep("click"); confirmResetMission(); };
 
